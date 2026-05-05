@@ -6,7 +6,7 @@ This repository provides a centralized, community-driven tracker for Red Hat Ans
 
 ## 📋 Compatibility Tables
 
-For easy viewing, the raw data has been converted into user-friendly Markdown tables, which are generated from the central CSV file.
+For easy viewing, the raw data has been converted into user-friendly Markdown tables, which are generated from their respective CSV files.
 
 * [**Red Hat Ansible Automation Platform 2.4**](./AAP_24.md)
 * [**Red Hat Ansible Automation Platform 2.5**](./AAP_25.md)
