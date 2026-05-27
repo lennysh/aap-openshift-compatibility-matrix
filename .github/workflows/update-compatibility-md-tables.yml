@@ -5,6 +5,7 @@ name: Update Compatibility Markdown Tables from CSV
 # This action is triggered on every push to the 'main' branch,
 # but only if the 'data/AAP_ALL.csv' file was changed.
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
