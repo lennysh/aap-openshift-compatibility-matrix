@@ -1,0 +1,5 @@
+# Red Hat Ansible Automation Platform 2.7 - OpenShift Operator Component versions
+
+| Release Date | Operator CSV (Cluster-scoped) | Operator CSV (Namespace-scoped) | OpenShift Support | Gateway | Controller | Receptor | Redis | EDA | Hub | Lightspeed | Release Notes | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| May 19, 2026 | aap-operator.v2.7.0-0.1779173658 | aap-operator.v2.7.0-0.1779173639 | 4.14-4.21 |  |  |  |  |  |  |  |  |  |
