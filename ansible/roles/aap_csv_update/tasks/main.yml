@@ -1,0 +1,41 @@
+---
+- name: Check if podman is installed
+  ansible.builtin.command: which podman
+  register: aap_csv_update_podman_check
+  changed_when: false
+  failed_when: aap_csv_update_podman_check.rc != 0
+
+- name: Log in to Red Hat container registry
+  when: aap_csv_update_registry_username | length > 0 and aap_csv_update_registry_password | length > 0
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo "{{ aap_csv_update_registry_password }}" | podman login {{ aap_csv_update_registry }} -u "{{ aap_csv_update_registry_username }}" --password-stdin
+  no_log: true
+  changed_when: false
+
+- name: Verify registry login (when credentials not provided)
+  when: aap_csv_update_registry_username | default('') | length == 0 or aap_csv_update_registry_password | default('') | length == 0
+  ansible.builtin.command:
+    cmd: podman login {{ aap_csv_update_registry }} --get-login
+  register: aap_csv_update_login_check
+  changed_when: false
+  failed_when: aap_csv_update_login_check.rc != 0
+
+- name: Update AAP CSV versions
+  aap_csv_update:
+    columns: "{{ aap_csv_update_columns }}"
+    loops: "{{ aap_csv_update_loops }}"
+    data_dir: "{{ aap_csv_update_data_dir }}"
+  register: aap_csv_update_result
+
+- name: Display update results
+  ansible.builtin.debug:
+    msg: "{{ aap_csv_update_result.messages }}"
+  when: aap_csv_update_result.messages | length > 0
+
+- name: Summary
+  ansible.builtin.debug:
+    msg: >-
+      Rows added: {{ aap_csv_update_result.rows_added }},
+      Rows updated: {{ aap_csv_update_result.rows_updated }},
+      Changed: {{ aap_csv_update_result.changed }}

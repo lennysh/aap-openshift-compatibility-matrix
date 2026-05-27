@@ -1,14 +1,20 @@
 ---
-# AAP CSV compatibility matrix: column indices and OCP/channel loops
-# Edit this file to change OCP versions, channels, and AAP versions checked.
+# Registry (override with -e or REGISTRY_USERNAME / REGISTRY_PASSWORD env vars)
+aap_csv_update_registry: registry.redhat.io
+aap_csv_update_registry_username: "{{ lookup('env', 'REGISTRY_USERNAME') }}"
+aap_csv_update_registry_password: "{{ lookup('env', 'REGISTRY_PASSWORD') }}"
 
-columns:
+# Directory containing AAP_*.csv files (repo data/ when role lives under ansible/roles/)
+aap_csv_update_data_dir: "{{ role_path }}/../../data"
+
+# AAP CSV compatibility matrix: column indices and OCP/channel loops
+aap_csv_update_columns:
   release_date: 1
   cluster_scoped: 2
   namespace_scoped: 3
   openshift_support: 4
 
-loops:
+aap_csv_update_loops:
   - ocp_version: "4.18"
     channel: stable-2.4
     aap_version: "2.4"
@@ -41,4 +47,3 @@ loops:
     channel: stable-2.7-cluster-scoped
     aap_version: "2.7"
     scope: cluster
-...

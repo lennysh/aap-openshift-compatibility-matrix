@@ -1,6 +1,6 @@
 # Ansible AAP CSV Update
 
-This directory contains an Ansible playbook and module to update the AAP operator CSV compatibility matrix.
+This directory contains an Ansible playbook and role to update the AAP operator CSV compatibility matrix.
 
 ## Requirements
 
@@ -12,7 +12,7 @@ This directory contains an Ansible playbook and module to update the AAP operato
 
 ### 1. Registry Authentication
 
-The playbook needs to pull images from the Red Hat registry. Registry URL and credentials are loaded from **`vars/registry.yml`**, which uses environment variables by default.
+The role needs to pull images from the Red Hat registry. Registry URL and credentials are defined in **`roles/aap_csv_update/defaults/main.yml`**, which uses environment variables by default.
 
 **Option A: Set environment variables**
 ```bash
@@ -23,7 +23,7 @@ ansible-playbook playbook.yml
 
 **Option B: Override at run time**
 ```bash
-ansible-playbook playbook.yml -e "registry_username=USER" -e "registry_password=PASS"
+ansible-playbook playbook.yml -e "aap_csv_update_registry_username=USER" -e "aap_csv_update_registry_password=PASS"
 ```
 
 **Option C: Login beforehand**
@@ -56,35 +56,29 @@ The repo includes a workflow **Update AAP CSV matrix** (`.github/workflows/updat
    - `REGISTRY_PASSWORD`: Red Hat registry password (e.g. token)
 3. The workflow installs Podman and Ansible, runs the playbook, then commits and pushes any changes under `data/*.csv`.
 
-## Variables
+## Role: aap_csv_update
 
-The playbook loads variables from two files (in order):
+The playbook applies the **`aap_csv_update`** role (`roles/aap_csv_update/`).
 
-1. **`vars/registry.yml`** – registry URL and credentials  
-   - `registry`: Container registry (default `registry.redhat.io`)  
-   - `registry_username`: From env `REGISTRY_USERNAME` if set  
-   - `registry_password`: From env `REGISTRY_PASSWORD` if set  
+### Variables
 
-2. **`vars/check_versions.yml`** – CSV matrix configuration  
-   - Edit this file to change OCP versions, channels, and AAP versions.
-
-Playbook-level vars:
+Defaults live in **`roles/aap_csv_update/defaults/main.yml`**. Override at run time with `-e` or in your own vars file.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `data_dir` | `{{ playbook_dir }}/../data` | Directory containing AAP_*.csv files |
+| `aap_csv_update_registry` | `registry.redhat.io` | Container registry |
+| `aap_csv_update_registry_username` | env `REGISTRY_USERNAME` | Registry username |
+| `aap_csv_update_registry_password` | env `REGISTRY_PASSWORD` | Registry password |
+| `aap_csv_update_data_dir` | `{{ role_path }}/../../data` | Directory containing AAP_*.csv files |
+| `aap_csv_update_columns` | see defaults | Column indices for CSV fields |
+| `aap_csv_update_loops` | see defaults | OCP versions, channels, and AAP versions to check |
 
-From **vars/check_versions.yml**:
-
-| Variable | Description |
-|----------|-------------|
-| `columns` | Column indices: release_date, cluster_scoped, namespace_scoped, openshift_support |
-| `loops` | List of `{ ocp_version, channel, aap_version, scope }` entries |
+Edit **`defaults/main.yml`** to change OCP versions, channels, and AAP versions checked.
 
 ## Module: aap_csv_update
 
-The `aap_csv_update` module:
-- Uses `columns` and `loops` (from vars) or a config file for OCP versions and channels
+The `aap_csv_update` module (in `roles/aap_csv_update/library/`):
+- Uses `columns` and `loops` (from role defaults) or a config file for OCP versions and channels
 - Pulls operator index images via podman
 - Extracts CSV versions from namespace and cluster-scoped channels
 - Pairs versions by timestamp

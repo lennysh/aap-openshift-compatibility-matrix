@@ -1,5 +1,0 @@
----
-registry: "registry.redhat.io"
-registry_username: "{{ lookup('env', 'REGISTRY_USERNAME') }}"
-registry_password: "{{ lookup('env', 'REGISTRY_PASSWORD') }}"
-...

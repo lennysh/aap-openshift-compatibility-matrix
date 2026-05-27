@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  role_name: aap_csv_update
+  author: lennysh
+  description: Update AAP operator CSV compatibility matrix from Red Hat operator index
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.9"
+  platforms:
+    - name: GenericLinux
+      versions:
+        - all
+  galaxy_tags:
+    - aap
+    - openshift
+    - operator
+
+dependencies: []

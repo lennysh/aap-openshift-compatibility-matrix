@@ -3,10 +3,10 @@
 # Requires: podman, podman login to registry.redhat.io
 #
 # Usage:
-#   ansible-playbook -i inventory.yml playbook.yml
+#   ansible-playbook playbook.yml
 #
 # For registry authentication, set variables (use -e or a vault):
-#   ansible-playbook -i inventory.yml playbook.yml -e "registry_username=USER" -e "registry_password=PASS"
+#   ansible-playbook playbook.yml -e "aap_csv_update_registry_username=USER" -e "aap_csv_update_registry_password=PASS"
 #   Or use --ask-vault-pass with vault-encrypted vars
 
 - name: Update AAP operator CSV compatibility matrix
@@ -14,48 +14,5 @@
   connection: local
   gather_facts: false
 
-  vars_files:
-    - vars/registry.yml
-    - vars/check_versions.yml
-
-  vars:
-    data_dir: "{{ playbook_dir }}/../data"
-
-  tasks:
-    - name: Check if podman is installed
-      ansible.builtin.command: which podman
-      register: podman_check
-      changed_when: false
-      failed_when: podman_check.rc != 0
-
-    - name: Log in to Red Hat container registry
-      when: registry_username | length > 0 and registry_password | length > 0
-      ansible.builtin.shell: |
-        set -o pipefail
-        echo "{{ registry_password }}" | podman login {{ registry }} -u "{{ registry_username }}" --password-stdin
-      no_log: true
-      changed_when: false
-
-    - name: Verify registry login (when credentials not provided)
-      when: registry_username | default('') | length == 0 or registry_password | default('') | length == 0
-      ansible.builtin.command:
-        cmd: podman login {{ registry }} --get-login
-      register: login_check
-      changed_when: false
-      failed_when: login_check.rc != 0
-
-    - name: Update AAP CSV versions
-      aap_csv_update:
-        columns: "{{ columns }}"
-        loops: "{{ loops }}"
-        data_dir: "{{ data_dir }}"
-      register: update_result
-
-    - name: Display update results
-      ansible.builtin.debug:
-        msg: "{{ update_result.messages }}"
-      when: update_result.messages | length > 0
-
-    - name: Summary
-      ansible.builtin.debug:
-        msg: "Rows added: {{ update_result.rows_added }}, Rows updated: {{ update_result.rows_updated }}, Changed: {{ update_result.changed }}"
+  roles:
+    - aap_csv_update
