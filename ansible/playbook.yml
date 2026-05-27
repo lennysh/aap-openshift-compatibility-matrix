@@ -6,8 +6,13 @@
 #   ansible-playbook playbook.yml
 #
 # For registry authentication, set variables (use -e or a vault):
-#   ansible-playbook playbook.yml -e "aap_csv_update_registry_username=USER" -e "aap_csv_update_registry_password=PASS"
+#   ansible-playbook playbook.yml -e "aap_matrix_registry_username=USER" -e "aap_matrix_registry_password=PASS"
 #   Or use --ask-vault-pass with vault-encrypted vars
+#
+# Runs in order:
+#   1. aap_matrix_common  — podman/registry setup
+#   2. aap_csv_update     — add missing operator CSV rows per channel
+#   3. aap_openshift_support — scrape all OCP indexes, refresh OpenShift Support ranges
 
 - name: Update AAP operator CSV compatibility matrix
   hosts: localhost
@@ -15,4 +20,6 @@
   gather_facts: false
 
   roles:
+    - aap_matrix_common
     - aap_csv_update
+    - aap_openshift_support

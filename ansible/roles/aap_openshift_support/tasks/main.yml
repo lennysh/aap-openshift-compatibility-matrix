@@ -1,0 +1,33 @@
+---
+- name: Scrape operator CSV coverage from operator index
+  aap_operator_index_scrape:
+    ocp_version: "{{ item }}"
+    package_name: "{{ aap_matrix_operator_package }}"
+    registry: "{{ aap_matrix_registry }}"
+  loop: "{{ aap_matrix_operator_index_ocp_versions }}"
+  loop_control:
+    label: "OCP {{ item }}"
+  register: aap_openshift_support_scrape_loop
+
+- name: Write operator index overlaps JSON
+  aap_operator_index_overlaps_write:
+    scrape_results: "{{ aap_openshift_support_scrape_loop.results }}"
+    output_path: "{{ aap_matrix_overlaps_json }}"
+    package_name: "{{ aap_matrix_operator_package }}"
+
+- name: Update OpenShift Support ranges in matrix CSVs
+  aap_openshift_support_update:
+    overlaps_json: "{{ aap_matrix_overlaps_json }}"
+    data_dir: "{{ aap_matrix_data_dir }}"
+  register: aap_openshift_support_merge
+
+- name: Display OpenShift Support merge messages
+  ansible.builtin.debug:
+    msg: "{{ aap_openshift_support_merge.messages }}"
+  when: aap_openshift_support_merge.messages | length > 0
+
+- name: OpenShift Support summary
+  ansible.builtin.debug:
+    msg: >-
+      Rows updated: {{ aap_openshift_support_merge.rows_updated }},
+      Changed: {{ aap_openshift_support_merge.changed }}

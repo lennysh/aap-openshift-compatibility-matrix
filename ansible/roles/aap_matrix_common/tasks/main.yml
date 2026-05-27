@@ -1,0 +1,24 @@
+---
+- name: Check if podman is installed
+  ansible.builtin.command: which podman
+  register: aap_matrix_podman_check
+  changed_when: false
+  failed_when: aap_matrix_podman_check.rc != 0
+
+- name: Log in to Red Hat container registry
+  when: aap_matrix_registry_username | length > 0 and aap_matrix_registry_password | length > 0
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo "{{ aap_matrix_registry_password }}" | podman login {{ aap_matrix_registry }} -u "{{ aap_matrix_registry_username }}" --password-stdin
+  no_log: true
+  changed_when: false
+
+- name: Verify registry login (when credentials not provided)
+  when: >-
+    aap_matrix_registry_username | default('') | length == 0
+    or aap_matrix_registry_password | default('') | length == 0
+  ansible.builtin.command:
+    cmd: podman login {{ aap_matrix_registry }} --get-login
+  register: aap_matrix_login_check
+  changed_when: false
+  failed_when: aap_matrix_login_check.rc != 0

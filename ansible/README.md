@@ -1,6 +1,6 @@
 # Ansible AAP CSV Update
 
-This directory contains an Ansible playbook and role to update the AAP operator CSV compatibility matrix.
+This directory contains an Ansible playbook and roles to maintain the AAP operator CSV compatibility matrix.
 
 ## Requirements
 
@@ -8,13 +8,28 @@ This directory contains an Ansible playbook and role to update the AAP operator 
 - Podman
 - Access to `registry.redhat.io` (Red Hat registry)
 
+## Playbook flow
+
+The playbook runs three roles in order:
+
+| Role | Purpose |
+|------|---------|
+| `aap_matrix_common` | Podman check, registry login, shared variables |
+| `aap_csv_update` | Add missing operator CSV rows from configured OCP channels |
+| `aap_openshift_support` | Scrape all OCP index tags, update **OpenShift Support** ranges on every `data/AAP_*.csv` |
+
+OpenShift Support merge rules (same as `scripts/merge-openshift-support-from-overlaps.py`):
+
+- **Blank cell** — filled from min/max OCP index tags where the bundle appears.
+- **Existing range** — lowest OCP is preserved (EOL floor); highest OCP is extended when a newer index tag lists the bundle.
+
 ## Setup
 
-### 1. Registry Authentication
+### Registry authentication
 
-The role needs to pull images from the Red Hat registry. Registry URL and credentials are defined in **`roles/aap_csv_update/defaults/main.yml`**, which uses environment variables by default.
+Shared variables live in **`roles/aap_matrix_common/defaults/main.yml`**.
 
-**Option A: Set environment variables**
+**Option A: Environment variables**
 ```bash
 export REGISTRY_USERNAME=YOUR_REDHAT_USER
 export REGISTRY_PASSWORD=YOUR_REDHAT_PASSWORD
@@ -23,78 +38,56 @@ ansible-playbook playbook.yml
 
 **Option B: Override at run time**
 ```bash
-ansible-playbook playbook.yml -e "aap_csv_update_registry_username=USER" -e "aap_csv_update_registry_password=PASS"
+ansible-playbook playbook.yml \
+  -e "aap_matrix_registry_username=USER" \
+  -e "aap_matrix_registry_password=PASS"
 ```
 
 **Option C: Login beforehand**
 ```bash
 podman login registry.redhat.io
-# Enter your Red Hat username and password when prompted
+ansible-playbook playbook.yml
 ```
-Then run the playbook without credentials - it will verify you're already logged in.
 
-### 2. Run the Playbook
+### Run the playbook
 
-From the `ansible` directory:
 ```bash
 cd ansible
 ansible-playbook playbook.yml
 ```
 
-Or from the project root:
-```bash
-ansible-playbook ansible/playbook.yml -i ansible/inventory.yml
-```
+## GitHub Actions
 
-### 3. GitHub Actions (on-demand)
+Workflow **Update AAP CSV matrix** (`.github/workflows/update-csv-matrix.yml`) runs the playbook, then commits `data/*.csv` and regenerated markdown.
 
-The repo includes a workflow **Update AAP CSV matrix** (`.github/workflows/update-csv-matrix.yml`) that you can run manually:
+Required secrets: `REGISTRY_USERNAME`, `REGISTRY_PASSWORD`.
 
-1. **Actions** → **Update AAP CSV matrix** → **Run workflow**
-2. Configure these **repository secrets** (Settings → Secrets and variables → Actions):
-   - `REGISTRY_USERNAME`: Red Hat registry username
-   - `REGISTRY_PASSWORD`: Red Hat registry password (e.g. token)
-3. The workflow installs Podman and Ansible, runs the playbook, then commits and pushes any changes under `data/*.csv`.
+## Shared variables (`aap_matrix_*`)
 
-## Role: aap_csv_update
+Edit **`roles/aap_matrix_common/defaults/main.yml`**:
 
-The playbook applies the **`aap_csv_update`** role (`roles/aap_csv_update/`).
+| Variable | Description |
+|----------|-------------|
+| `aap_matrix_data_dir` | Directory with `AAP_*.csv` files |
+| `aap_matrix_overlaps_json` | Operator index scrape output (default `scripts/csv-overlaps.json`) |
+| `aap_matrix_operator_index_ocp_versions` | All OCP tags to scan for OpenShift Support |
+| `aap_matrix_loops` | OCP/channel/AAP entries for CSV row updates |
+| `aap_matrix_columns` | CSV column indices |
 
-### Variables
+## Modules
 
-Defaults live in **`roles/aap_csv_update/defaults/main.yml`**. Override at run time with `-e` or in your own vars file.
+### `aap_csv_update` (role `aap_csv_update`)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `aap_csv_update_registry` | `registry.redhat.io` | Container registry |
-| `aap_csv_update_registry_username` | env `REGISTRY_USERNAME` | Registry username |
-| `aap_csv_update_registry_password` | env `REGISTRY_PASSWORD` | Registry password |
-| `aap_csv_update_data_dir` | `{{ role_path }}/../../data` | Directory containing AAP_*.csv files |
-| `aap_csv_update_columns` | see defaults | Column indices for CSV fields |
-| `aap_csv_update_loops` | see defaults | OCP versions, channels, and AAP versions to check |
+Adds missing operator CSV version rows using configured channels.
 
-Edit **`defaults/main.yml`** to change OCP versions, channels, and AAP versions checked.
+### `aap_operator_index_scrape` + `aap_operator_index_overlaps_write` (role `aap_openshift_support`)
 
-## Module: aap_csv_update
+One Ansible loop iteration per OCP index tag (live task output per pull), then assembles `csv-overlaps.json` (replaces `scripts/find-csv-overlaps.sh` in automation).
 
-The `aap_csv_update` module (in `roles/aap_csv_update/library/`):
-- Uses `columns` and `loops` (from role defaults) or a config file for OCP versions and channels
-- Pulls operator index images via podman
-- Extracts CSV versions from namespace and cluster-scoped channels
-- Pairs versions by timestamp
-- Updates CSV files with missing entries
+### `aap_openshift_support_update` (role `aap_openshift_support`)
 
-### Module Parameters
+Updates OpenShift Support from the overlaps JSON (replaces `scripts/merge-openshift-support-from-overlaps.py` in automation).
 
-- `columns`: (optional) Dict of column indices; use with `loops` from vars
-- `loops`: (optional) List of loop entries; when set, `config_file` is ignored
-- `config_file`: (optional) Path to check-versions.json when not using vars
-- `data_dir`: Directory containing AAP_*.csv files
-- `registry`: Registry URL (for future use)
+## Legacy scripts
 
-### Returns
-
-- `changed`: Whether any files were modified
-- `messages`: List of status messages
-- `rows_added`: Number of new rows added
-- `rows_updated`: Number of existing rows updated
+`scripts/find-csv-overlaps.sh` and `scripts/merge-openshift-support-from-overlaps.py` remain available for manual runs; the playbook uses the Ansible modules above.

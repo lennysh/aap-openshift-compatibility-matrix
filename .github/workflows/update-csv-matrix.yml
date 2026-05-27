@@ -50,7 +50,7 @@ jobs:
 
           git add data/*.csv
           if ! git diff --staged --quiet; then
-            git commit -m "chore: update AAP CSV compatibility matrix from operator index"
+            git commit -m "chore: update AAP CSV matrix (operator CSVs and OpenShift Support)"
             git push
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           else
