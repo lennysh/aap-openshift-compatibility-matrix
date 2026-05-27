@@ -74,13 +74,16 @@ jobs:
           ./scripts/csv2md.sh \
             -t "Red Hat Ansible Automation Platform 2.6 - OpenShift Operator Component versions" \
             ./data/AAP_26.csv > AAP_26.md
+          ./scripts/csv2md.sh \
+            -t "Red Hat Ansible Automation Platform 2.7 - OpenShift Operator Component versions" \
+            ./data/AAP_27.csv > AAP_27.md
 
       - name: Commit and push Markdown changes
         if: steps.csv-push.outputs.pushed == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
-          git add AAP_24.md AAP_25.md AAP_26.md
+          git add AAP_24.md AAP_25.md AAP_26.md AAP_27.md
           if ! git diff --staged --quiet; then
             git commit -m "docs: auto-generate markdown tables from CSV update"
             git push
