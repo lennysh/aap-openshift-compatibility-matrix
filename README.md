@@ -11,6 +11,7 @@ For easy viewing, the raw data has been converted into user-friendly Markdown ta
 * [**Red Hat Ansible Automation Platform 2.4**](./AAP_24.md)
 * [**Red Hat Ansible Automation Platform 2.5**](./AAP_25.md)
 * [**Red Hat Ansible Automation Platform 2.6**](./AAP_26.md)
+* [**Red Hat Ansible Automation Platform 2.7**](./AAP_27.md)
 
 ## ⚙️ How It Works
 
