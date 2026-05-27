@@ -12,6 +12,7 @@ on:
       - 'data/AAP_24.csv'
       - 'data/AAP_25.csv'
       - 'data/AAP_26.csv'
+      - 'data/AAP_27.csv'
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
