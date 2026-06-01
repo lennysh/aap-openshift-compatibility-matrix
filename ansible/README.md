@@ -78,7 +78,7 @@ Edit **`roles/aap_matrix_common/defaults/main.yml`**:
 
 ### `aap_csv_update` (role `aap_csv_update`)
 
-Adds missing operator CSV version rows using configured channels.
+One Ansible loop iteration per OCP + AAP version (namespace loop entry). Operator index for each OCP is cached under `.cache/operator-index/` so later AAP versions on the same OCP reuse the extract without re-pulling.
 
 ### `aap_operator_index_scrape` + `aap_operator_index_overlaps_write` (role `aap_openshift_support`)
 

@@ -1,3 +1,4 @@
 .ansible/
+.cache/
 .vscode/
 __pycache__/

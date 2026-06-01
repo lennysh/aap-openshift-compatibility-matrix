@@ -1,19 +1,36 @@
 ---
-- name: Update AAP CSV versions
+- name: Update AAP CSV versions from operator index
   aap_csv_update:
+    ocp_version: "{{ item.ocp_version }}"
+    aap_version: "{{ item.aap_version }}"
+    namespace_channel: "{{ item.channel }}"
+    cluster_channel: "{{ aap_csv_update_cluster_channel }}"
     columns: "{{ aap_matrix_columns }}"
-    loops: "{{ aap_matrix_loops }}"
     data_dir: "{{ aap_matrix_data_dir }}"
-  register: aap_csv_update_result
+    index_cache_dir: "{{ aap_matrix_index_cache_dir }}"
+    package_name: "{{ aap_matrix_operator_package }}"
+    registry: "{{ aap_matrix_registry }}"
+  vars:
+    aap_csv_update_cluster_channel: >-
+      {{
+        (
+          aap_matrix_loops
+          | selectattr('ocp_version', 'equalto', item.ocp_version)
+          | selectattr('aap_version', 'equalto', item.aap_version)
+          | selectattr('scope', 'equalto', 'cluster')
+          | map(attribute='channel')
+          | list
+          | first
+        ) | default('', true)
+      }}
+  loop: "{{ aap_matrix_loops | selectattr('scope', 'equalto', 'namespace') | list }}"
+  loop_control:
+    label: "OCP {{ item.ocp_version }} AAP {{ item.aap_version }}"
+  register: aap_csv_update_loop
 
-- name: Display update results
-  ansible.builtin.debug:
-    msg: "{{ aap_csv_update_result.messages }}"
-  when: aap_csv_update_result.messages | length > 0
-
-- name: Summary
+- name: CSV update summary
   ansible.builtin.debug:
     msg: >-
-      Rows added: {{ aap_csv_update_result.rows_added }},
-      Rows updated: {{ aap_csv_update_result.rows_updated }},
-      Changed: {{ aap_csv_update_result.changed }}
+      Rows added: {{ aap_csv_update_loop.results | map(attribute='rows_added') | sum }},
+      Rows updated: {{ aap_csv_update_loop.results | map(attribute='rows_updated') | sum }},
+      Files changed: {{ aap_csv_update_loop.results | selectattr('changed') | list | length }}

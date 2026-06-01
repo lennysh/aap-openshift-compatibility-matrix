@@ -8,6 +8,8 @@ aap_matrix_registry_password: "{{ lookup('env', 'REGISTRY_PASSWORD') }}"
 aap_matrix_repo_root: "{{ playbook_dir }}/.."
 aap_matrix_data_dir: "{{ aap_matrix_repo_root }}/data"
 aap_matrix_overlaps_json: "{{ aap_matrix_repo_root }}/scripts/csv-overlaps.json"
+# Cached operator index extracts (one dir per OCP); reused across AAP versions in aap_csv_update loop
+aap_matrix_index_cache_dir: "{{ aap_matrix_repo_root }}/.cache/operator-index"
 
 # Operator index scrape (all OCP tags to scan for OpenShift Support ranges)
 aap_matrix_operator_package: ansible-automation-platform-operator
