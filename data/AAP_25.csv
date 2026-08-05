@@ -33,4 +33,4 @@ Release Date,Operator CSV (Cluster-scoped),Operator CSV (Namespace-scoped),OpenS
 "June 09, 2026",aap-operator.v2.5.0-0.1780320379,aap-operator.v2.5.0-0.1780320522,4.12-4.21,2.5.20260422,4.6.29,1.6.5,6.2.20,1.1.18,4.10.15,2.5.20260603,https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html-single/release_notes/index#aap-25-20260603,
 "June 23, 2026",aap-operator.v2.5.0-0.1781744244,aap-operator.v2.5.0-0.1781744269,4.12-4.21,2.5.20260422,4.6.29,1.6.5,6.2.20,1.1.19,4.10.15,2.5.20260603,,
 "July 21, 2026",aap-operator.v2.5.0-0.1784067933,aap-operator.v2.5.0-0.1784067919,4.12-4.21,2.5.20260715,4.6.30,1.6.6,6.2.22,1.1.20,4.10.16,2.5.20260715,,
-"August 05, 2026",aap-operator.v2.5.0-0.1785458863,aap-operator.v2.5.0-0.1785458922,4.12-4.21,,,,,,,,,
+"August 05, 2026",aap-operator.v2.5.0-0.1785458863,aap-operator.v2.5.0-0.1785458922,4.12-4.21,2.5.20260804,4.6.31,1.6.7,6.2.22,1.1.21,4.10.17,2.5.20260804,,
