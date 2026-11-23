@@ -3,7 +3,7 @@
 name: Update Compatibility Markdown Tables from CSV
 
 # This action is triggered on every push to the 'main' branch,
-# but only if the 'data/AAP_ALL.csv' file was changed.
+# but only if one of the data/AAP_*.csv files listed below was changed.
 on:
   workflow_dispatch:
   push:
@@ -14,6 +14,10 @@ on:
       - 'data/AAP_25.csv'
       - 'data/AAP_26.csv'
       - 'data/AAP_27.csv'
+
+# Needed so the job can push the regenerated markdown back to main
+permissions:
+  contents: write
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -53,14 +57,14 @@ jobs:
             -t "Red Hat Ansible Automation Platform 2.6 - OpenShift Operator Component versions" \
             ./data/AAP_26.csv > AAP_26.md
 
-      # 5. Generate the Markdown file for AAP 2.6
+      # 6. Generate the Markdown file for AAP 2.7
       - name: Generate AAP 2.7 Markdown Table
         run: |
           ./scripts/csv2md.sh \
             -t "Red Hat Ansible Automation Platform 2.7 - OpenShift Operator Component versions" \
             ./data/AAP_27.csv > AAP_27.md
 
-      # 6. Commit the updated Markdown files back to the repository
+      # 7. Commit the updated Markdown files back to the repository
       - name: Commit and push changes
         run: |
           # Configure git with the action's user
