@@ -25,6 +25,9 @@ aap_matrix_operator_index_ocp_versions:
   - "4.19"
   - "4.20"
   - "4.21"
+  - "4.22"
+  - "4.23"
+  - "5.0"
 
 # AAP CSV version update: column indices and OCP/channel loops
 aap_matrix_columns:

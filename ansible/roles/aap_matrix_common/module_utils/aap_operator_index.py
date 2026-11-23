@@ -41,8 +41,13 @@ def extract_operator_index(module, ocp_version, registry="registry.redhat.io"):
 
     rc, _, err = run_command(module, ["podman", "pull", image], check_rc=False)
     if rc != 0:
-        module.warn("Failed to pull image %s: %s" % (image, err))
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        # A tag that isn't published yet (e.g. a future OCP release listed ahead of GA)
+        # is expected, not a scrape failure.
+        if re.search(r"manifest unknown|not found", err or "", re.IGNORECASE):
+            module.warn("Operator index %s not published yet; skipping" % image)
+            return None, "tag_not_found"
+        module.warn("Failed to pull image %s: %s" % (image, err))
         return None, "pull_failed"
 
     result = subprocess.run(["podman", "create", image], capture_output=True, text=True)

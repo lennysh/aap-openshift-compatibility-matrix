@@ -8,7 +8,8 @@ from the `-0.<unix>` suffix when it is a plausible epoch) | OCP index tags.
 Rows are sorted by full CSV version within each section.
 
 If any OCP index scrape failed, an existing report is left untouched so a partial
-scrape never publishes a table with OCP versions missing.
+scrape never publishes a table with OCP versions missing. Index tags that are not
+published yet (status "tag_not_found", e.g. a future OCP release) do not count as failures.
 
 Usage: python3 scripts/csv-overlaps-to-markdown.py [input_json] [-o OUTPUT]
 """
@@ -145,9 +146,17 @@ def main() -> int:
 
     summary = data.get("summary") or {}
 
-    attempted = summary.get("ocp_versions_attempted") or []
-    scrape_ok = set(summary.get("ocp_versions_scrape_ok") or attempted)
-    failed = sorted((v for v in attempted if v not in scrape_ok), key=ocp_sort_key)
+    # Per-OCP scrape status. "ok*" = index pulled; "tag_not_found" = index not published yet
+    # (expected for future OCP releases). Anything else is a real failure.
+    by_ocp = (data.get("scrape_report") or {}).get("by_ocp") or {}
+    statuses = {str(k): str((v or {}).get("status", "unknown")) for k, v in by_ocp.items()}
+    not_published = sorted(
+        (v for v, st in statuses.items() if st == "tag_not_found"), key=ocp_sort_key
+    )
+    failed = sorted(
+        (v for v, st in statuses.items() if not st.startswith("ok") and st != "tag_not_found"),
+        key=ocp_sort_key,
+    )
     if failed and out.exists():
         print(
             f"::warning::Index scrape failed for OCP {', '.join(failed)}; "
@@ -172,6 +181,9 @@ def main() -> int:
     lines.append("")
     if checked_line:
         lines.append(f"**OCP index tags scanned:** {checked_line}")
+        lines.append("")
+    if not_published:
+        lines.append(f"**OCP index tags not published yet:** {', '.join(not_published)}")
         lines.append("")
     if "total_unique_csv_versions" in summary:
         lines.append(f"**Unique operator CSVs:** {summary['total_unique_csv_versions']}")
