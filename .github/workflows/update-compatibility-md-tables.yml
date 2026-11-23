@@ -26,7 +26,7 @@ jobs:
     steps:
       # 1. Check out the repository under $GITHUB_WORKSPACE, so the job can access it
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 2. Make the conversion script executable
       - name: Make script executable
