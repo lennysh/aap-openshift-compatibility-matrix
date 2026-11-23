@@ -18,7 +18,7 @@ The playbook runs three roles in order:
 | `aap_csv_update` | Add missing operator CSV rows from configured OCP channels |
 | `aap_openshift_support` | Scrape all OCP index tags, update **OpenShift Support** ranges on every `data/AAP_*.csv` |
 
-OpenShift Support merge rules (same as `scripts/merge-openshift-support-from-overlaps.py`):
+OpenShift Support merge rules:
 
 - **Blank cell** — filled from min/max OCP index tags where the bundle appears.
 - **Existing range** — lowest OCP is preserved (EOL floor); highest OCP is extended when a newer index tag lists the bundle.
@@ -82,12 +82,16 @@ One Ansible loop iteration per OCP + AAP version (namespace loop entry). Operato
 
 ### `aap_operator_index_scrape` + `aap_operator_index_overlaps_write` (role `aap_openshift_support`)
 
-One Ansible loop iteration per OCP index tag (live task output per pull), then assembles `csv-overlaps.json` (replaces `scripts/find-csv-overlaps.sh` in automation).
+One Ansible loop iteration per OCP index tag (live task output per pull), then assembles `csv-overlaps.json`.
 
 ### `aap_openshift_support_update` (role `aap_openshift_support`)
 
-Updates OpenShift Support from the overlaps JSON (replaces `scripts/merge-openshift-support-from-overlaps.py` in automation).
+Updates OpenShift Support from the overlaps JSON.
 
-## Legacy scripts
+## Coverage report
 
-`scripts/find-csv-overlaps.sh` and `scripts/merge-openshift-support-from-overlaps.py` remain available for manual runs; the playbook uses the Ansible modules above.
+The scrape output (`scripts/csv-overlaps.json`, git-ignored) is rendered into [`OCP_INDEX_COVERAGE.md`](../OCP_INDEX_COVERAGE.md) by `scripts/csv-overlaps-to-markdown.py`. The scheduled workflow does this on every run; to do it locally after a playbook run:
+
+```bash
+python3 scripts/csv-overlaps-to-markdown.py
+```

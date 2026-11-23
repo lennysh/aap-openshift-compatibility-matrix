@@ -13,13 +13,15 @@ For easy viewing, the raw data has been converted into user-friendly Markdown ta
 * [**Red Hat Ansible Automation Platform 2.6**](./AAP_26.md)
 * [**Red Hat Ansible Automation Platform 2.7**](./AAP_27.md)
 
+To see which OpenShift versions' operator index lists each individual AAP operator build, see [**AAP Operator Builds by OpenShift Operator Index**](./OCP_INDEX_COVERAGE.md).
+
 ## ⚙️ How It Works
 
 The core of this repository is a simple, automated workflow designed for clarity and easy maintenance.
 
 1.  **Raw Data**: All version information is maintained in `data/AAP_2x.csv` files. These are the single source of truth for the entire repository and the only files that should be edited manually.
 
-2.  **Scheduled Updates**: The [Update AAP CSV matrix](.github/workflows/update-csv-matrix.yml) workflow runs every 6 hours. It scrapes the Red Hat operator indexes with the Ansible playbook in [`ansible/`](ansible/README.md), adds any new operator releases to the CSVs, regenerates the Markdown tables, and pushes both in a single commit.
+2.  **Scheduled Updates**: The [Update AAP CSV matrix](.github/workflows/update-csv-matrix.yml) workflow runs every 6 hours. It scrapes the Red Hat operator indexes with the Ansible playbook in [`ansible/`](ansible/README.md), adds any new operator releases to the CSVs, regenerates the Markdown tables and the [OCP index coverage report](./OCP_INDEX_COVERAGE.md), and pushes everything in a single commit.
 
 3.  **Manual Edits**: When a CSV is edited by hand and pushed to `main`, the [Update Compatibility Markdown Tables](.github/workflows/update-compatibility-md-tables.yml) workflow regenerates the Markdown tables.
 

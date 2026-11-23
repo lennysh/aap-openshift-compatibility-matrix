@@ -2,3 +2,6 @@
 .cache/
 .vscode/
 __pycache__/
+
+# Operator index scrape output written by the playbook (rendered into OCP_INDEX_COVERAGE.md)
+scripts/csv-overlaps.json

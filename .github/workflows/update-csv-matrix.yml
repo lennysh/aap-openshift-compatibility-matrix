@@ -1,5 +1,6 @@
 # Update AAP operator CSV compatibility matrix from Red Hat operator index,
-# regenerate the markdown tables, and push both back to main in one commit.
+# regenerate the markdown tables and OCP index coverage report, and push
+# everything back to main in one commit.
 # Runs every 6 hours or when manually triggered.
 #
 # Required repo secrets: REGISTRY_USERNAME, REGISTRY_PASSWORD (Red Hat registry credentials)
@@ -62,13 +63,16 @@ jobs:
       - name: Generate Markdown tables from CSV
         run: ./scripts/generate-md-tables.sh
 
+      - name: Generate OCP index coverage report
+        run: python scripts/csv-overlaps-to-markdown.py scripts/csv-overlaps.json -o OCP_INDEX_COVERAGE.md
+
       - name: Commit and push changes
         run: |
           set -euo pipefail
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add data/*.csv AAP_*.md
+          git add data/*.csv AAP_*.md OCP_INDEX_COVERAGE.md
           if git diff --staged --quiet; then
             echo "No CSV or markdown changes. Nothing to commit."
             exit 0
