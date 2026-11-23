@@ -1,5 +1,5 @@
 # Update AAP operator CSV compatibility matrix from Red Hat operator index,
-# then push any CSV/markdown changes back to the repo.
+# regenerate the markdown tables, and push both back to main in one commit.
 # Runs every 6 hours or when manually triggered.
 #
 # Required repo secrets: REGISTRY_USERNAME, REGISTRY_PASSWORD (Red Hat registry credentials)
@@ -15,9 +15,15 @@ on:
 permissions:
   contents: write
 
+# Shared with update-compatibility-md-tables.yml so the two never push to main at the same time
+concurrency:
+  group: push-to-main
+  cancel-in-progress: false
+
 jobs:
   update-csv:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -25,11 +31,20 @@ jobs:
 
       - name: Install Podman
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y podman
 
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
       - name: Install Ansible
-        run: python3 -m pip install ansible
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install "ansible-core>=2.20,<2.23"
 
       # Use Red Hat action so login works with rootless podman on runners; avoids password in playbook logs
       - name: Log in to Red Hat container registry
@@ -40,53 +55,25 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Run Ansible playbook
-        run: cd ansible && ansible-playbook playbook.yml -i inventory.yml
+        working-directory: ansible
+        run: ansible-playbook playbook.yml -i inventory.yml -e "ansible_python_interpreter=$(command -v python)"
 
-      - name: Commit and push CSV changes
-        id: csv-push
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "github-actions[bot]"
-
-          git add data/*.csv
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: update AAP CSV matrix (operator CSVs and OpenShift Support)"
-            git push
-            echo "pushed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No CSV changes. Nothing to commit."
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Make csv2md script executable
-        if: steps.csv-push.outputs.pushed == 'true'
-        run: chmod +x scripts/csv2md.sh
-
+      # Always regenerate so markdown also self-heals if it ever drifted from the CSVs
       - name: Generate Markdown tables from CSV
-        if: steps.csv-push.outputs.pushed == 'true'
-        run: |
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.4 - OpenShift Operator Component versions" \
-            ./data/AAP_24.csv > AAP_24.md
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.5 - OpenShift Operator Component versions" \
-            ./data/AAP_25.csv > AAP_25.md
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.6 - OpenShift Operator Component versions" \
-            ./data/AAP_26.csv > AAP_26.md
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.7 - OpenShift Operator Component versions" \
-            ./data/AAP_27.csv > AAP_27.md
+        run: ./scripts/generate-md-tables.sh
 
-      - name: Commit and push Markdown changes
-        if: steps.csv-push.outputs.pushed == 'true'
+      - name: Commit and push changes
         run: |
+          set -euo pipefail
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
-          git add AAP_24.md AAP_25.md AAP_26.md AAP_27.md
-          if ! git diff --staged --quiet; then
-            git commit -m "docs: auto-generate markdown tables from CSV update"
-            git push
-          else
-            echo "No markdown changes to commit."
+
+          git add data/*.csv AAP_*.md
+          if git diff --staged --quiet; then
+            echo "No CSV or markdown changes. Nothing to commit."
+            exit 0
           fi
+
+          git commit -m "chore: update AAP CSV matrix and markdown tables"
+          git pull --rebase origin main
+          git push origin HEAD:main

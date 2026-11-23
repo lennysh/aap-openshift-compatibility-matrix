@@ -17,21 +17,27 @@ For easy viewing, the raw data has been converted into user-friendly Markdown ta
 
 The core of this repository is a simple, automated workflow designed for clarity and easy maintenance.
 
-1.  **Raw Data**: All version information is maintained in respective `AAP_2x.csv` files. These are the single source of truth for the entire repository and the only files that should be edited manually.
+1.  **Raw Data**: All version information is maintained in `data/AAP_2x.csv` files. These are the single source of truth for the entire repository and the only files that should be edited manually.
 
-2.  **Conversion Script**: A bash script (`csv2md.sh`) reads the `AAP_2x.csv` files. This script can filter rows, remove columns, and format URLs into clickable links.
+2.  **Scheduled Updates**: The [Update AAP CSV matrix](.github/workflows/update-csv-matrix.yml) workflow runs every 6 hours. It scrapes the Red Hat operator indexes with the Ansible playbook in [`ansible/`](ansible/README.md), adds any new operator releases to the CSVs, regenerates the Markdown tables, and pushes both in a single commit.
 
-3.  **Markdown Output**: The script processes the data from each `AAP_2x.csv` file and generates the two Markdown files (`AAP_24.md` and `AAP_25.md`), creating clean, readable tables.
+3.  **Manual Edits**: When a CSV is edited by hand and pushed to `main`, the [Update Compatibility Markdown Tables](.github/workflows/update-compatibility-md-tables.yml) workflow regenerates the Markdown tables.
 
-### Automation Example
+4.  **Conversion Scripts**: [`scripts/generate-md-tables.sh`](scripts/generate-md-tables.sh) runs [`scripts/csv2md.sh`](scripts/csv2md.sh) for every `data/AAP_*.csv`, writing `AAP_<ver>.md` to the repo root. `csv2md.sh` can also filter rows, remove columns, and format URLs into clickable links.
 
-The Markdown files are automatically generated using the `csv2md.sh` script included in this repository. For example, to regenerate the AAP 2.5 table, the following command is used:
+### Regenerating Locally
 
 ```bash
-./scripts/csv2md.sh \
-  -t "Red Hat Ansible Automation Platform 2.5 - OpenShift Operator Component versions" \
-  ./data/AAP_25.csv > AAP_25.md
+./scripts/generate-md-tables.sh
 ```
+
+### Adding a New AAP Version
+
+1. Add `data/AAP_<major><minor>.csv` (for example `data/AAP_28.csv`).
+2. Add its operator channels (`stable-2.x` and `stable-2.x-cluster-scoped`) to the channel list in [`ansible/roles/aap_matrix_common/defaults/main.yml`](ansible/roles/aap_matrix_common/defaults/main.yml) so the scheduled update tracks it.
+3. Add a link to its Markdown file in the list above.
+
+No workflow changes are needed; both workflows pick up new CSV files automatically.
 
 ## 🤝 Contributing
 

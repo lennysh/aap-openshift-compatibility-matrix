@@ -1,87 +1,54 @@
 # .github/workflows/update-compatibility-md-tables.yml
+#
+# Regenerates AAP_*.md when a data/AAP_*.csv is changed by hand and pushed to main.
+# (The scheduled "Update AAP CSV matrix" workflow regenerates markdown itself; its
+# GITHUB_TOKEN pushes do not trigger this workflow.)
 
 name: Update Compatibility Markdown Tables from CSV
 
-# This action is triggered on every push to the 'main' branch,
-# but only if one of the data/AAP_*.csv files listed below was changed.
 on:
   workflow_dispatch:
   push:
     branches:
       - main
     paths:
-      - 'data/AAP_24.csv'
-      - 'data/AAP_25.csv'
-      - 'data/AAP_26.csv'
-      - 'data/AAP_27.csv'
+      - 'data/AAP_*.csv'
+      - 'scripts/csv2md.sh'
+      - 'scripts/generate-md-tables.sh'
 
 # Needed so the job can push the regenerated markdown back to main
 permissions:
   contents: write
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-jobs:
-  # This workflow contains a single job called "update-tables"
-  update-tables:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+# Shared with update-csv-matrix.yml so the two never push to main at the same time
+concurrency:
+  group: push-to-main
+  cancel-in-progress: false
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+jobs:
+  update-tables:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
-      # 1. Check out the repository under $GITHUB_WORKSPACE, so the job can access it
       - name: Check out repository
         uses: actions/checkout@v7
 
-      # 2. Make the conversion script executable
-      - name: Make script executable
-        run: chmod +x scripts/csv2md.sh
+      - name: Generate Markdown tables from CSV
+        run: ./scripts/generate-md-tables.sh
 
-      # 3. Generate the Markdown file for AAP 2.4
-      - name: Generate AAP 2.4 Markdown Table
-        run: |
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.4 - OpenShift Operator Component versions" \
-            ./data/AAP_24.csv > AAP_24.md
-
-      # 4. Generate the Markdown file for AAP 2.5
-      - name: Generate AAP 2.5 Markdown Table
-        run: |
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.5 - OpenShift Operator Component versions" \
-            ./data/AAP_25.csv > AAP_25.md
-
-      # 5. Generate the Markdown file for AAP 2.6
-      - name: Generate AAP 2.6 Markdown Table
-        run: |
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.6 - OpenShift Operator Component versions" \
-            ./data/AAP_26.csv > AAP_26.md
-
-      # 6. Generate the Markdown file for AAP 2.7
-      - name: Generate AAP 2.7 Markdown Table
-        run: |
-          ./scripts/csv2md.sh \
-            -t "Red Hat Ansible Automation Platform 2.7 - OpenShift Operator Component versions" \
-            ./data/AAP_27.csv > AAP_27.md
-
-      # 7. Commit the updated Markdown files back to the repository
       - name: Commit and push changes
         run: |
-          # Configure git with the action's user
+          set -euo pipefail
           git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.name "github-actions[bot]"
 
-          # Add the generated files to the staging area
-          git add AAP_24.md AAP_25.md AAP_26.md AAP_27.md
-
-          # Check if there are any changes to commit.
-          # The "git diff" command will exit with a non-zero status if there are changes.
-          if ! git diff --staged --quiet; then
-            # If there are changes, commit them
-            git commit -m "docs: auto-generate markdown tables from CSV update"
-            # and push them to the main branch
-            git push
-          else
-            # If there are no changes, print a message
+          git add AAP_*.md
+          if git diff --staged --quiet; then
             echo "No changes to the Markdown files. Nothing to commit."
+            exit 0
           fi
+
+          git commit -m "docs: auto-generate markdown tables from CSV update"
+          git pull --rebase origin main
+          git push origin HEAD:main
