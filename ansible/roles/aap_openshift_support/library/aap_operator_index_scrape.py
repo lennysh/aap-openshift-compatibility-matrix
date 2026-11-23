@@ -28,6 +28,10 @@ options:
     required: false
     type: str
     default: registry.redhat.io
+  index_cache_dir:
+    description: Reuse an index extract cached earlier in the run (read-only; nothing is added).
+    required: false
+    type: path
 author:
   - lennysh
 '''
@@ -78,7 +82,11 @@ def run(module):
         module.fail_json(msg="ocp_version must be a non-empty string")
 
     result = scrape_all_csv_versions(
-        module, ocp_version, package_name, registry=registry
+        module,
+        ocp_version,
+        package_name,
+        registry=registry,
+        cache_dir=module.params.get("index_cache_dir"),
     )
     csv_versions = result["csv_versions"]
     status = result["status"]
@@ -112,6 +120,7 @@ def main():
             ocp_version=dict(type="str", required=True),
             package_name=dict(type="str", default="ansible-automation-platform-operator"),
             registry=dict(type="str", default="registry.redhat.io"),
+            index_cache_dir=dict(type="path", required=False),
         ),
         supports_check_mode=False,
     )

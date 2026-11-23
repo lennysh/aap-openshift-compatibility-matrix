@@ -8,16 +8,20 @@ __metaclass__ = type
 DOCUMENTATION = r'''
 ---
 module: aap_csv_update
-short_description: Update one AAP matrix CSV from operator index for a single OCP and AAP version
+short_description: Update one AAP matrix CSV from the operator index for one AAP stream
 description:
-  - Pulls (or reuses cached) operator index for one OCP tag and updates one AAP_*.csv file.
-  - Use in an Ansible loop over namespace-scoped aap_matrix_loops entries for live progress.
+  - Pulls (or reuses cached) the operator index for the first available OCP tag in
+    ocp_versions and updates one AAP_*.csv file.
+  - Use in an Ansible loop over aap_matrix_aap_streams for live progress.
 version_added: "1.0.0"
 options:
-  ocp_version:
-    description: OCP index tag (e.g. 4.18).
+  ocp_versions:
+    description:
+      - OCP index tags to read the channels from, tried in order (newest first).
+      - A tag whose index is not published yet is skipped; any other pull failure fails the task.
     required: true
-    type: str
+    type: list
+    elements: str
   aap_version:
     description: AAP version (e.g. 2.4) matching AAP_24.csv.
     required: true
@@ -27,9 +31,15 @@ options:
     required: true
     type: str
   cluster_channel:
-    description: OLM channel name for cluster-scoped operator.
-    required: true
+    description: OLM channel name for cluster-scoped operator (empty if the stream has none).
+    required: false
     type: str
+    default: ""
+  create_missing_csv:
+    description: Create AAP_<ver>.csv (header from the newest existing CSV) if it does not exist.
+    required: false
+    type: bool
+    default: false
   columns:
     description: Column indices for the matrix CSV.
     required: true
@@ -59,16 +69,17 @@ author:
 EXAMPLES = r'''
 - name: Update AAP CSV versions from operator index
   aap_csv_update:
-    ocp_version: "{{ item.ocp_version }}"
+    ocp_versions: "{{ item.ocp_versions }}"
     aap_version: "{{ item.aap_version }}"
-    namespace_channel: "{{ item.channel }}"
-    cluster_channel: "{{ aap_csv_update_cluster_channel }}"
+    namespace_channel: "{{ item.namespace_channel }}"
+    cluster_channel: "{{ item.cluster_channel }}"
+    create_missing_csv: true
     columns: "{{ aap_matrix_columns }}"
     data_dir: "{{ aap_matrix_data_dir }}"
     index_cache_dir: "{{ aap_matrix_index_cache_dir }}"
-  loop: "{{ aap_matrix_loops | selectattr('scope', 'equalto', 'namespace') | list }}"
+  loop: "{{ aap_matrix_aap_streams }}"
   loop_control:
-    label: "OCP {{ item.ocp_version }} AAP {{ item.aap_version }}"
+    label: "AAP {{ item.aap_version }}"
 '''
 
 RETURN = r'''
@@ -87,6 +98,12 @@ rows_updated:
 index_cache_hit:
   description: True if operator index was reused from cache for this OCP.
   type: bool
+ocp_version:
+  description: OCP index tag actually used.
+  type: str
+csv_created:
+  description: True if the CSV file was created by this run.
+  type: bool
 '''
 
 import os
@@ -101,10 +118,11 @@ from ansible.module_utils.aap_csv_matrix import (
 
 
 def run(module):
-    ocp_version = str(module.params["ocp_version"]).strip()
+    ocp_versions = [str(v).strip() for v in module.params["ocp_versions"] or [] if str(v).strip()]
     aap_version = str(module.params["aap_version"]).strip()
     namespace_channel = str(module.params["namespace_channel"]).strip()
-    cluster_channel = str(module.params["cluster_channel"]).strip()
+    cluster_channel = str(module.params["cluster_channel"] or "").strip()
+    create_missing_csv = module.params["create_missing_csv"]
     columns = module.params["columns"] or {}
     package_name = module.params["package_name"]
     registry = module.params["registry"]
@@ -114,25 +132,34 @@ def run(module):
     if cache_dir:
         cache_dir = os.path.abspath(os.path.expanduser(cache_dir))
 
-    if not ocp_version or not aap_version:
-        module.fail_json(msg="ocp_version and aap_version are required")
-    if not namespace_channel or not cluster_channel:
-        module.fail_json(
-            msg="namespace_channel and cluster_channel are required for AAP %s on OCP %s"
-            % (aap_version, ocp_version)
+    if not ocp_versions or not aap_version:
+        module.fail_json(msg="ocp_versions and aap_version are required")
+    if not namespace_channel:
+        module.fail_json(msg="namespace_channel is required for AAP %s" % aap_version)
+
+    index_dir = None
+    not_published = []
+    for ocp_version in ocp_versions:
+        index_dir, pulled, index_status = ensure_operator_index_dir(
+            module, ocp_version, cache_dir, registry
         )
-
-    index_dir, pulled, index_status = ensure_operator_index_dir(
-        module, ocp_version, cache_dir, registry
-    )
-    cache_hit = index_status == "cached"
-    cleanup_index = index_dir is not None and not cache_dir
-
-    if index_dir is None:
+        if index_dir is not None:
+            break
+        if index_status == "tag_not_found":
+            not_published.append(ocp_version)
+            continue
         module.fail_json(
             msg="Failed to extract operator index for OCP %s (status=%s)"
             % (ocp_version, index_status)
         )
+    if index_dir is None:
+        module.fail_json(
+            msg="None of the operator index tags for AAP %s are published: %s"
+            % (aap_version, ", ".join(not_published))
+        )
+
+    cache_hit = index_status == "cached"
+    cleanup_index = not cache_dir
 
     try:
         result = update_csv_for_aap(
@@ -144,6 +171,7 @@ def run(module):
             namespace_channel,
             cluster_channel,
             package_name,
+            create_missing_csv=create_missing_csv,
         )
     finally:
         if cleanup_index:
@@ -158,9 +186,14 @@ def run(module):
         msg = "OCP %s AAP %s: no operator CSVs in index channels" % (ocp_version, aap_version)
     elif skip == "empty_csv":
         msg = "OCP %s AAP %s: %s is empty" % (ocp_version, aap_version, csv_name)
+    elif skip == "no_template_csv":
+        msg = "OCP %s AAP %s: cannot create %s (no existing AAP_*.csv to copy the header from)" % (
+            ocp_version, aap_version, csv_name)
+        module.warn(msg)
     elif result["changed"]:
         msg = (
-            "OCP %s AAP %s: updated %s (+%d rows, ~%d rows)%s"
+            ("OCP %s AAP %s: CREATED %s (+%d rows, ~%d rows)%s" if result.get("csv_created")
+             else "OCP %s AAP %s: updated %s (+%d rows, ~%d rows)%s")
             % (
                 ocp_version,
                 aap_version,
@@ -186,17 +219,20 @@ def run(module):
         "index_cache_hit": cache_hit,
         "index_pulled": pulled and not cache_hit,
         "ocp_version": ocp_version,
+        "ocp_versions_not_published": not_published,
         "aap_version": aap_version,
+        "csv_created": bool(result.get("csv_created")),
     }
 
 
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            ocp_version=dict(type="str", required=True),
+            ocp_versions=dict(type="list", elements="str", required=True),
             aap_version=dict(type="str", required=True),
             namespace_channel=dict(type="str", required=True),
-            cluster_channel=dict(type="str", required=True),
+            cluster_channel=dict(type="str", default=""),
+            create_missing_csv=dict(type="bool", default=False),
             columns=dict(type="dict", required=True),
             data_dir=dict(type="path", required=True),
             index_cache_dir=dict(type="path", required=False),

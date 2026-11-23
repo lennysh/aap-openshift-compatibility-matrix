@@ -92,6 +92,22 @@ def get_existing_ocp_support(rows, openshift_col, cluster_col, namespace_col):
     return ""
 
 
+def template_header(data_dir):
+    """Header row of the newest existing AAP_<digits>.csv in data_dir (or None)."""
+    best = None
+    for name in os.listdir(data_dir):
+        m = re.match(r"^AAP_(\d)(\d+)\.csv$", name)
+        if not m:
+            continue
+        key = (int(m.group(1)), int(m.group(2)))
+        if best is None or key > best[0]:
+            best = (key, name)
+    if best is None:
+        return None
+    rows = read_csv_rows(os.path.join(data_dir, best[1]))
+    return rows[0] if rows else None
+
+
 def write_csv_rows(csv_path, rows):
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(rows)
@@ -187,8 +203,13 @@ def update_csv_for_aap(
     namespace_channel,
     cluster_channel,
     package_name,
+    create_missing_csv=False,
 ):
-    """Update one AAP_*.csv from an already-extracted operator index directory."""
+    """Update one AAP_*.csv from an already-extracted operator index directory.
+
+    If the CSV does not exist and create_missing_csv is set, it is created (header copied
+    from the newest existing AAP_*.csv) once the index confirms the channel has builds.
+    """
     cluster_col = int(columns.get("cluster_scoped", 2))
     namespace_col = int(columns.get("namespace_scoped", 3))
     date_col = int(columns.get("release_date", 1))
@@ -196,13 +217,15 @@ def update_csv_for_aap(
 
     aap_file_version = aap_version.replace(".", "")
     csv_path = os.path.join(data_dir, "AAP_%s.csv" % aap_file_version)
-    if not os.path.isfile(csv_path):
+    csv_exists = os.path.isfile(csv_path)
+    if not csv_exists and not create_missing_csv:
         return {
             "changed": False,
             "rows_added": 0,
             "rows_updated": 0,
             "csv_path": csv_path,
             "skip_reason": "csv_not_found",
+            "csv_created": False,
         }
 
     version_pattern = re.compile(
@@ -211,9 +234,11 @@ def update_csv_for_aap(
     namespace_versions, _, _ = extract_csv_versions_from_dir(
         index_dir, package_name, channel=namespace_channel
     )
-    cluster_versions, _, _ = extract_csv_versions_from_dir(
-        index_dir, package_name, channel=cluster_channel
-    )
+    cluster_versions = []
+    if cluster_channel:
+        cluster_versions, _, _ = extract_csv_versions_from_dir(
+            index_dir, package_name, channel=cluster_channel
+        )
     namespace_versions = [v for v in namespace_versions if version_pattern.match(v)]
     cluster_versions = [v for v in cluster_versions if version_pattern.match(v)]
 
@@ -224,7 +249,23 @@ def update_csv_for_aap(
             "rows_updated": 0,
             "csv_path": csv_path,
             "skip_reason": "no_versions_in_index",
+            "csv_created": False,
         }
+
+    csv_created = False
+    if not csv_exists:
+        header = template_header(data_dir)
+        if not header:
+            return {
+                "changed": False,
+                "rows_added": 0,
+                "rows_updated": 0,
+                "csv_path": csv_path,
+                "skip_reason": "no_template_csv",
+                "csv_created": False,
+            }
+        write_csv_rows(csv_path, [header])
+        csv_created = True
 
     rows = read_csv_rows(csv_path)
     if not rows:
@@ -234,6 +275,7 @@ def update_csv_for_aap(
             "rows_updated": 0,
             "csv_path": csv_path,
             "skip_reason": "empty_csv",
+            "csv_created": False,
         }
 
     today_date = datetime.now().strftime("%B %d, %Y")
@@ -332,9 +374,10 @@ def update_csv_for_aap(
         write_csv_rows(csv_path, rows)
 
     return {
-        "changed": changed,
+        "changed": changed or csv_created,
         "rows_added": rows_added,
         "rows_updated": rows_updated,
         "csv_path": csv_path,
         "skip_reason": None,
+        "csv_created": csv_created,
     }

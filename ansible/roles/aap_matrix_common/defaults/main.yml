@@ -8,64 +8,42 @@ aap_matrix_registry_password: "{{ lookup('env', 'REGISTRY_PASSWORD') }}"
 aap_matrix_repo_root: "{{ playbook_dir }}/.."
 aap_matrix_data_dir: "{{ aap_matrix_repo_root }}/data"
 aap_matrix_overlaps_json: "{{ aap_matrix_repo_root }}/scripts/csv-overlaps.json"
-# Cached operator index extracts (one dir per OCP); reused across AAP versions in aap_csv_update loop
+# Operator index extracts (one dir per OCP) shared between aap_csv_update and the
+# OpenShift Support scrape within one run; cleared at the start of every run
 aap_matrix_index_cache_dir: "{{ aap_matrix_repo_root }}/.cache/operator-index"
 
-# Operator index scrape (all OCP tags to scan for OpenShift Support ranges)
+# Operator package to track
 aap_matrix_operator_package: ansible-automation-platform-operator
-aap_matrix_operator_index_ocp_versions:
-  - "4.11"
-  - "4.12"
-  - "4.13"
-  - "4.14"
-  - "4.15"
-  - "4.16"
-  - "4.17"
-  - "4.18"
-  - "4.19"
-  - "4.20"
-  - "4.21"
-  - "4.22"
-  - "4.23"
-  - "5.0"
 
-# AAP CSV version update: column indices and OCP/channel loops
+# --- Discovery -------------------------------------------------------------------
+# OCP versions and AAP channels are discovered on every run from the public Red Hat
+# catalog API (no credentials), so new OCP releases and new AAP stable-X.Y channels are
+# picked up automatically. The operator index images are still the source of truth for
+# the data itself.
+aap_matrix_catalog_api_url: https://catalog.redhat.com/api/containers/v1/operators/bundles
+# Ignore anything older than these
+aap_matrix_min_ocp_version: "4.11"
+aap_matrix_min_aap_version: "2.4"
+# Per AAP stream, try this many of the newest OCP index tags carrying it (newest first;
+# falls back if a tag is listed in the catalog but its index isn't published yet)
+aap_matrix_max_ocp_candidates: 3
+# Create data/AAP_<ver>.csv (header copied from the newest existing CSV) when a new
+# AAP stream appears
+aap_matrix_create_missing_csv: true
+
+# Optional manual overrides. Leave empty to use discovery.
+#   aap_matrix_operator_index_ocp_versions: ["4.18", "4.19"]
+#   aap_matrix_aap_streams:
+#     - aap_version: "2.7"
+#       namespace_channel: stable-2.7
+#       cluster_channel: stable-2.7-cluster-scoped
+#       ocp_versions: ["4.20", "4.18"]   # tried in order
+aap_matrix_operator_index_ocp_versions: []
+aap_matrix_aap_streams: []
+
+# AAP CSV version update: column indices (1-based)
 aap_matrix_columns:
   release_date: 1
   cluster_scoped: 2
   namespace_scoped: 3
   openshift_support: 4
-
-aap_matrix_loops:
-  - ocp_version: "4.18"
-    channel: stable-2.4
-    aap_version: "2.4"
-    scope: namespace
-  - ocp_version: "4.18"
-    channel: stable-2.4-cluster-scoped
-    aap_version: "2.4"
-    scope: cluster
-  - ocp_version: "4.18"
-    channel: stable-2.5
-    aap_version: "2.5"
-    scope: namespace
-  - ocp_version: "4.18"
-    channel: stable-2.5-cluster-scoped
-    aap_version: "2.5"
-    scope: cluster
-  - ocp_version: "4.18"
-    channel: stable-2.6
-    aap_version: "2.6"
-    scope: namespace
-  - ocp_version: "4.18"
-    channel: stable-2.6-cluster-scoped
-    aap_version: "2.6"
-    scope: cluster
-  - ocp_version: "4.18"
-    channel: stable-2.7
-    aap_version: "2.7"
-    scope: namespace
-  - ocp_version: "4.18"
-    channel: stable-2.7-cluster-scoped
-    aap_version: "2.7"
-    scope: cluster

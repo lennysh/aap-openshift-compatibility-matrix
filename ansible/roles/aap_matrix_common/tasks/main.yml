@@ -22,3 +22,40 @@
   register: aap_matrix_login_check
   changed_when: false
   failed_when: aap_matrix_login_check.rc != 0
+
+- name: Clear operator index cache from previous runs (it is only shared within one run)
+  ansible.builtin.file:
+    path: "{{ aap_matrix_index_cache_dir }}"
+    state: absent
+
+- name: Discover OCP versions and AAP channels from the Red Hat catalog
+  when: >-
+    aap_matrix_operator_index_ocp_versions | length == 0
+    or aap_matrix_aap_streams | length == 0
+  aap_matrix_discover:
+    package_name: "{{ aap_matrix_operator_package }}"
+    catalog_api_url: "{{ aap_matrix_catalog_api_url }}"
+    min_ocp_version: "{{ aap_matrix_min_ocp_version }}"
+    min_aap_version: "{{ aap_matrix_min_aap_version }}"
+    max_ocp_candidates: "{{ aap_matrix_max_ocp_candidates }}"
+  register: aap_matrix_discovery
+
+- name: Use discovered OCP versions and AAP streams (manual overrides win)
+  when: aap_matrix_discovery is not skipped
+  ansible.builtin.set_fact:
+    aap_matrix_operator_index_ocp_versions: >-
+      {{ aap_matrix_operator_index_ocp_versions
+         if aap_matrix_operator_index_ocp_versions | length > 0
+         else aap_matrix_discovery.ocp_versions }}
+    aap_matrix_aap_streams: >-
+      {{ aap_matrix_aap_streams
+         if aap_matrix_aap_streams | length > 0
+         else aap_matrix_discovery.aap_streams }}
+
+- name: Show OCP versions and AAP streams for this run
+  ansible.builtin.debug:
+    msg:
+      - "OCP index tags: {{ aap_matrix_operator_index_ocp_versions | join(', ') }}"
+      - >-
+        AAP streams: {{ aap_matrix_aap_streams
+          | map(attribute='aap_version') | join(', ') }}

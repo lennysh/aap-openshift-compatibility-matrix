@@ -10,8 +10,9 @@
 #   Or use --ask-vault-pass with vault-encrypted vars
 #
 # Runs in order:
-#   1. aap_matrix_common  — podman/registry setup
-#   2. aap_csv_update     — add missing operator CSV rows per channel
+#   1. aap_matrix_common  — podman/registry setup, discover OCP versions + AAP channels
+#                           from the public Red Hat catalog API
+#   2. aap_csv_update     — add missing operator CSV rows per AAP stream (creates new AAP_*.csv)
 #   3. aap_openshift_support — scrape all OCP indexes, refresh OpenShift Support ranges
 
 - name: Update AAP operator CSV compatibility matrix

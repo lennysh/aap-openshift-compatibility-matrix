@@ -149,9 +149,30 @@ def version_key_from_csv(csv_name):
     return int(match.group(1)) if match else 0
 
 
-def scrape_all_csv_versions(module, ocp_version, package_name, registry="registry.redhat.io"):
-    """Scrape one OCP index tag; return status dict and sorted CSV name list."""
-    tmp_dir, status = extract_operator_index(module, ocp_version, registry=registry)
+def cached_index_dir(cache_dir, ocp_version):
+    """Return the cached extract for ocp_version under cache_dir if it has configs, else None."""
+    if not cache_dir:
+        return None
+    sub = os.path.join(os.path.abspath(os.path.expanduser(cache_dir)), "ocp-%s" % ocp_version)
+    if os.path.isdir(sub):
+        for _, _, files in os.walk(sub):
+            if any(f.endswith(".json") for f in files):
+                return sub
+    return None
+
+
+def scrape_all_csv_versions(
+    module, ocp_version, package_name, registry="registry.redhat.io", cache_dir=None
+):
+    """Scrape one OCP index tag; return status dict and sorted CSV name list.
+
+    Reuses an extract cached earlier in the run (by aap_csv_update) instead of pulling again.
+    """
+    cached = cached_index_dir(cache_dir, ocp_version)
+    if cached:
+        tmp_dir, status = cached, "ok"
+    else:
+        tmp_dir, status = extract_operator_index(module, ocp_version, registry=registry)
     if tmp_dir is None:
         return {
             "status": status,
@@ -184,4 +205,5 @@ def scrape_all_csv_versions(module, ocp_version, package_name, registry="registr
             "csv_versions": versions,
         }
     finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if not cached:
+            shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -4,6 +4,7 @@
     ocp_version: "{{ item }}"
     package_name: "{{ aap_matrix_operator_package }}"
     registry: "{{ aap_matrix_registry }}"
+    index_cache_dir: "{{ aap_matrix_index_cache_dir }}"
   loop: "{{ aap_matrix_operator_index_ocp_versions }}"
   loop_control:
     label: "OCP {{ item }}"

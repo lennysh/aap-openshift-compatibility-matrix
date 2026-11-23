@@ -72,7 +72,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add data/*.csv AAP_*.md OCP_INDEX_COVERAGE.md
+          git add data/*.csv AAP_*.md OCP_INDEX_COVERAGE.md README.md
           if git diff --staged --quiet; then
             echo "No CSV or markdown changes. Nothing to commit."
             exit 0

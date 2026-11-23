@@ -43,7 +43,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add AAP_*.md
+          git add AAP_*.md README.md
           if git diff --staged --quiet; then
             echo "No changes to the Markdown files. Nothing to commit."
             exit 0
