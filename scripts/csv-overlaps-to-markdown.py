@@ -49,6 +49,26 @@ def ocp_sort_key(v: str) -> tuple[int, ...]:
     return tuple(int(p) for p in v.split(".") if p.isdigit())
 
 
+def compress_ocp_ranges(ocps: list[str], scanned_order: list[str]) -> str:
+    """Collapse runs of consecutive scanned OCP tags: 4.12, 4.14-4.21, 5.0-5.1.
+
+    "Consecutive" follows the order of tags actually scanned (so 4.23 -> 5.0 is a run),
+    and a tag that was not scanned never breaks a run.
+    """
+    pos = {v: i for i, v in enumerate(scanned_order)}
+    known = sorted((v for v in ocps if v in pos), key=lambda v: pos[v])
+    unknown = sorted((v for v in ocps if v not in pos), key=ocp_sort_key)
+    parts: list[str] = []
+    i = 0
+    while i < len(known):
+        j = i
+        while j + 1 < len(known) and pos[known[j + 1]] == pos[known[j]] + 1:
+            j += 1
+        parts.append(known[i] if i == j else f"{known[i]}-{known[j]}")
+        i = j + 1
+    return ", ".join(parts + unknown)
+
+
 def md_escape_cell(s: str) -> str:
     return s.replace("|", "\\|").replace("\n", " ")
 
@@ -170,12 +190,19 @@ def main() -> int:
     else:
         checked_line = str(checked)
 
+    # Order used to decide which OCP tags are "consecutive" in the coverage column
+    scanned_order = sorted(
+        (v for v, st in statuses.items() if st.startswith("ok")), key=ocp_sort_key
+    ) or sorted({o for ocps in presence.values() for o in ocps}, key=ocp_sort_key)
+
     lines: list[str] = []
     lines.append("# AAP Operator Builds by OpenShift Operator Index")
     lines.append("")
     lines.append(
         "Every Ansible Automation Platform operator build (CSV) currently published in the "
         "Red Hat operator index, and the OpenShift versions whose index lists it. "
+        "Consecutive versions are shown as ranges (e.g. `4.14-4.21` lists every OCP release "
+        "from 4.14 through 4.21). Build time is decoded from the `-0.<unix time>` CSV suffix. "
         "Generated automatically from the operator index scrape; do not edit by hand."
     )
     lines.append("")
@@ -199,12 +226,11 @@ def main() -> int:
             lines.append(f"### AAP {mm[0]}.{mm[1]}")
         lines.append("")
         lines.append(
-            "| Operator CSV | Build time (UTC, from `-0.` suffix) | OpenShift index versions (OCP) |"
+            "| Operator CSV | Build time (UTC) | OCP versions |"
         )
         lines.append("| --- | --- | --- |")
         for csv_name in csv_names:
-            ocps = sorted(presence[csv_name], key=ocp_sort_key)
-            ocp_cell = ", ".join(ocps)
+            ocp_cell = compress_ocp_ranges(list(presence[csv_name]), scanned_order)
             when = build_suffix_as_utc_datetime(csv_name)
             when_cell = when if when else "—"
             lines.append(
