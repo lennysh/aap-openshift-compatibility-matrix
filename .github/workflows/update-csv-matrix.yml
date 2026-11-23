@@ -33,7 +33,7 @@ jobs:
 
       # Use Red Hat action so login works with rootless podman on runners; avoids password in playbook logs
       - name: Log in to Red Hat container registry
-        uses: redhat-actions/podman-login@v1
+        uses: redhat-actions/podman-login@v2
         with:
           registry: registry.redhat.io
           username: ${{ secrets.REGISTRY_USERNAME }}
