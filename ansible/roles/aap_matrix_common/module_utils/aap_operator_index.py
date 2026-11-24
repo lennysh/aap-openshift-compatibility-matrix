@@ -13,6 +13,12 @@ import subprocess
 import tempfile
 
 
+# podman pull has no timeout of its own: when registry blob downloads stall (seen locally
+# at ~1 KB/s for 13+ minutes) a pull hangs until the job is killed. An index normally
+# pulls in under a minute.
+PULL_TIMEOUT = 900
+
+
 def version_key(version):
     parts = version.strip().split(".")
     return tuple(int(p) for p in parts if p.isdigit())
@@ -83,7 +89,15 @@ def extract_operator_index(module, ocp_version, registry="registry.redhat.io", p
     image = "%s/redhat/redhat-operator-index:v%s" % (registry, ocp_version)
     tmp_dir = tempfile.mkdtemp()
 
-    rc, _, err = run_command(module, ["podman", "pull", image], check_rc=False)
+    try:
+        pulled = subprocess.run(
+            ["podman", "pull", image], capture_output=True, text=True, timeout=PULL_TIMEOUT
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        module.warn("Pull of %s timed out after %ds" % (image, PULL_TIMEOUT))
+        return None, "pull_timeout"
+    rc, err = pulled.returncode, pulled.stderr
     if rc != 0:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         # A tag that isn't published yet (e.g. a future OCP release listed ahead of GA)
