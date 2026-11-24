@@ -15,7 +15,7 @@ The playbook runs three roles in order:
 | Role | Purpose |
 |------|---------|
 | `aap_matrix_common` | Podman check, registry login, shared variables, **discovery** of OCP versions and AAP channels from the public Red Hat catalog API, and a parallel **prefetch** of every index into the run cache |
-| `aap_csv_update` | For each AAP stream, read its channels from the newest published OCP index and add missing operator CSV rows (creating `data/AAP_<ver>.csv` for a new stream) |
+| `aap_csv_update` | For each AAP stream, read its channels from every OCP index, merge them, and add missing operator CSV rows (creating `data/AAP_<ver>.csv` for a new stream) |
 | `aap_openshift_support` | Scrape all discovered OCP index tags, update **OpenShift Support** ranges on every `data/AAP_*.csv` |
 
 ### Discovery
@@ -23,7 +23,7 @@ The playbook runs three roles in order:
 Each run queries `https://catalog.redhat.com/api/containers/v1/operators/bundles` (public, no credentials) for every bundle of `ansible-automation-platform-operator`. From that it derives:
 
 - **OCP versions** to scan: every OCP version the catalog lists for the package, from `aap_matrix_min_ocp_version` up.
-- **AAP streams**: every `stable-X.Y` / `stable-X.Y-cluster-scoped` channel pair from `aap_matrix_min_aap_version` up, each with the newest OCP tags that carry it (tried newest first; a tag listed in the catalog whose index image isn't published yet is skipped).
+- **AAP streams**: every `stable-X.Y` / `stable-X.Y-cluster-scoped` channel pair from `aap_matrix_min_aap_version` up. Each stream's channels are read from every OCP index and merged, because a release can ship to any subset of them (a tag listed in the catalog whose index image isn't published yet is skipped).
 
 The operator index images remain the source of truth for the data; the catalog only decides which tags and channels to read. Only the operator package's catalog (`/configs/<package>`) is copied out of each index, falling back to all of `/configs` if the package has no directory of its own. Extracts are cached under `.cache/operator-index/` for the duration of a run so an index read by `aap_csv_update` isn't pulled again by the OpenShift Support scrape.
 
@@ -81,7 +81,6 @@ Edit **`roles/aap_matrix_common/defaults/main.yml`**:
 | `aap_matrix_overlaps_json` | Operator index scrape output (default `scripts/csv-overlaps.json`) |
 | `aap_matrix_min_ocp_version` | Oldest OCP version to scan (default `4.11`) |
 | `aap_matrix_min_aap_version` | Oldest AAP stream to track (default `2.4`) |
-| `aap_matrix_max_ocp_candidates` | Newest OCP tags tried per AAP stream (default `3`) |
 | `aap_matrix_prefetch_workers` | Operator indexes pulled at once into the run cache before the loops (default `3`, `0` = off) |
 | `aap_matrix_create_missing_csv` | Create `data/AAP_<ver>.csv` for a newly discovered AAP stream (default `true`) |
 | `aap_matrix_operator_index_ocp_versions` | Manual override of the OCP tags to scan (empty = discover) |
@@ -96,7 +95,7 @@ Pulls every discovered OCP index tag, `aap_matrix_prefetch_workers` at a time, a
 
 ### `aap_csv_update` (role `aap_csv_update`)
 
-One Ansible loop iteration per AAP stream. Reads the stream's channels from the first published index in its `ocp_versions` list and pairs cluster/namespace builds into rows. If `data/AAP_<ver>.csv` doesn't exist (new stream) it is created with the header of the newest existing CSV, once the index confirms the channel has builds.
+One Ansible loop iteration per AAP stream. Reads the stream's channels from every OCP index (all scanned tags, or the stream's own `ocp_versions` in a manual override), merges them, and pairs cluster/namespace builds into rows. A build older than existing rows is inserted in build order (with a warning) rather than appended. If `data/AAP_<ver>.csv` doesn't exist (new stream) it is created with the header of the newest existing CSV, once the index confirms the channel has builds.
 
 ### `aap_operator_index_scrape` + `aap_operator_index_overlaps_write` (role `aap_openshift_support`)
 

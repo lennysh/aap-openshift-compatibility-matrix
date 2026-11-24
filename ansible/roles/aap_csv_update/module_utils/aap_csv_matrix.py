@@ -11,10 +11,7 @@ import re
 import shutil
 from datetime import datetime
 
-from ansible.module_utils.aap_operator_index import (
-    extract_csv_versions_from_dir,
-    extract_operator_index,
-)
+from ansible.module_utils.aap_operator_index import extract_operator_index
 
 
 def extract_timestamp(version):
@@ -119,7 +116,35 @@ def update_row_cell(rows, row_num, col_index, value):
         rows[idx][col_index - 1] = value
 
 
+def _row_timestamp(row, cluster_col, namespace_col):
+    stamps = [extract_timestamp(get_column_value(row, c)) for c in (cluster_col, namespace_col)]
+    stamps = [t for t in stamps if t]
+    return max(stamps) if stamps else None
+
+
+def insert_row_in_order(module, rows, new_row, version, cluster_col, namespace_col):
+    """Append new_row, unless it is older than an existing row (a backfilled build).
+
+    Then insert it before the first row built after it, so the CSV stays chronological,
+    and warn: reading every index means a historical build that was never recorded would
+    otherwise land at the bottom as if it were the newest release.
+    """
+    ts = extract_timestamp(version)
+    if ts:
+        for i in range(1, len(rows)):
+            row_ts = _row_timestamp(rows[i], cluster_col, namespace_col)
+            if row_ts and row_ts > ts:
+                module.warn(
+                    "%s is older than existing rows; inserted in build order at line %d "
+                    "instead of appended" % (version, i + 1)
+                )
+                rows.insert(i, new_row)
+                return
+    rows.append(new_row)
+
+
 def add_new_row(
+    module,
     rows,
     total_cols,
     date_col,
@@ -141,10 +166,11 @@ def add_new_row(
             new_row[i - 1] = version
         elif i == openshift_col and existing_ocp:
             new_row[i - 1] = existing_ocp
-    rows.append(new_row)
+    insert_row_in_order(module, rows, new_row, version, cluster_col, namespace_col)
 
 
 def add_new_row_pair(
+    module,
     rows,
     total_cols,
     date_col,
@@ -166,7 +192,7 @@ def add_new_row_pair(
             new_row[i - 1] = namespace_version
         elif i == openshift_col and existing_ocp:
             new_row[i - 1] = existing_ocp
-    rows.append(new_row)
+    insert_row_in_order(module, rows, new_row, namespace_version, cluster_col, namespace_col)
 
 
 def ensure_operator_index_dir(module, ocp_version, cache_dir, registry, package_name=None):
@@ -198,19 +224,19 @@ def ensure_operator_index_dir(module, ocp_version, cache_dir, registry, package_
 
 def update_csv_for_aap(
     module,
-    index_dir,
     data_dir,
     columns,
     aap_version,
-    namespace_channel,
-    cluster_channel,
-    package_name,
+    namespace_versions,
+    cluster_versions,
     create_missing_csv=False,
 ):
-    """Update one AAP_*.csv from an already-extracted operator index directory.
+    """Update one AAP_*.csv from the operator CSV names found in the stream's channels.
 
-    If the CSV does not exist and create_missing_csv is set, it is created (header copied
-    from the newest existing AAP_*.csv) once the index confirms the channel has builds.
+    namespace_versions / cluster_versions are the bundle names from the namespace- and
+    cluster-scoped channels, merged across every OCP index read. If the CSV does not exist
+    and create_missing_csv is set, it is created (header copied from the newest existing
+    AAP_*.csv) once the channels have builds.
     """
     cluster_col = int(columns.get("cluster_scoped", 2))
     namespace_col = int(columns.get("namespace_scoped", 3))
@@ -233,14 +259,6 @@ def update_csv_for_aap(
     version_pattern = re.compile(
         r"^aap-operator\.v[\d]+\.[\d]+\.[\d]+-[\d]+\.[\d]+$"
     )
-    namespace_versions, _, _ = extract_csv_versions_from_dir(
-        index_dir, package_name, channel=namespace_channel
-    )
-    cluster_versions = []
-    if cluster_channel:
-        cluster_versions, _, _ = extract_csv_versions_from_dir(
-            index_dir, package_name, channel=cluster_channel
-        )
     namespace_versions = [v for v in namespace_versions if version_pattern.match(v)]
     cluster_versions = [v for v in cluster_versions if version_pattern.match(v)]
 
@@ -308,6 +326,7 @@ def update_csv_for_aap(
                     rows_updated += 1
             else:
                 add_new_row_pair(
+                    module,
                     rows,
                     total_cols,
                     date_col,
@@ -324,6 +343,7 @@ def update_csv_for_aap(
                 rows_added += 1
         else:
             add_new_row(
+                module,
                 rows,
                 total_cols,
                 date_col,
@@ -358,6 +378,7 @@ def update_csv_for_aap(
                 rows_updated += 1
         else:
             add_new_row(
+                module,
                 rows,
                 total_cols,
                 date_col,
