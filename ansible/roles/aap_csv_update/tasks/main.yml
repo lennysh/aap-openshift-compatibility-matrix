@@ -7,6 +7,7 @@
     namespace_channel: "{{ item.namespace_channel }}"
     cluster_channel: "{{ item.cluster_channel }}"
     create_missing_csv: "{{ aap_matrix_create_missing_csv }}"
+    release_dates: "{{ aap_matrix_bundle_first_seen | default({}) }}"
     columns: "{{ aap_matrix_columns }}"
     data_dir: "{{ aap_matrix_data_dir }}"
     index_cache_dir: "{{ aap_matrix_index_cache_dir }}"
