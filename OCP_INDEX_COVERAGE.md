@@ -4,7 +4,7 @@ Every Ansible Automation Platform operator build (CSV) currently published in th
 
 **OCP index tags scanned:** 4.11, 4.12, 4.13, 4.14, 4.15, 4.16, 4.17, 4.18, 4.19, 4.20, 4.21, 4.22, 4.23, 5.0, 5.1
 
-**Unique operator CSVs:** 258
+**Unique operator CSVs:** 264
 
 ## CSV → OpenShift index versions (by AAP release)
 
@@ -116,6 +116,8 @@ Every Ansible Automation Platform operator build (CSV) currently published in th
 | `aap-operator.v2.4.0-0.1793319519` | 2026-10-30 00:18:39 UTC | 4.12, 4.14, 4.16, 4.18-4.20 |
 | `aap-operator.v2.4.0-0.1793880845` | 2026-11-05 12:14:05 UTC | 4.12, 4.14, 4.16, 4.18-4.20 |
 | `aap-operator.v2.4.0-0.1793887686` | 2026-11-05 14:08:06 UTC | 4.12, 4.14, 4.16, 4.18-4.20 |
+| `aap-operator.v2.4.0-0.1794385968` | 2026-11-11 08:32:48 UTC | 4.12, 4.14, 4.16, 4.18-4.20 |
+| `aap-operator.v2.4.0-0.1794390285` | 2026-11-11 09:44:45 UTC | 4.12, 4.14, 4.16, 4.18-4.20 |
 
 ### AAP 2.5
 
@@ -258,6 +260,8 @@ Every Ansible Automation Platform operator build (CSV) currently published in th
 | `aap-operator.v2.6.0-0.1793352877` | 2026-10-30 09:34:37 UTC | 4.14, 4.16, 4.18-4.22 |
 | `aap-operator.v2.6.0-0.1793870311` | 2026-11-05 09:18:31 UTC | 4.14, 4.16, 4.18-4.22 |
 | `aap-operator.v2.6.0-0.1793870349` | 2026-11-05 09:19:09 UTC | 4.14, 4.16, 4.18-4.22 |
+| `aap-operator.v2.6.0-0.1794615193` | 2026-11-14 00:13:13 UTC | 4.14, 4.16, 4.18-4.22 |
+| `aap-operator.v2.6.0-0.1794615226` | 2026-11-14 00:13:46 UTC | 4.14, 4.16, 4.18-4.22 |
 
 ### AAP 2.7
 
@@ -295,3 +299,5 @@ Every Ansible Automation Platform operator build (CSV) currently published in th
 | `aap-operator.v2.7.0-0.1793374989` | 2026-10-30 15:43:09 UTC | 4.14, 4.16, 4.18-5.1 |
 | `aap-operator.v2.7.0-0.1794269668` | 2026-11-10 00:14:28 UTC | 4.14, 4.16, 4.18-5.1 |
 | `aap-operator.v2.7.0-0.1794269743` | 2026-11-10 00:15:43 UTC | 4.14, 4.16, 4.18-5.1 |
+| `aap-operator.v2.7.0-0.1794591164` | 2026-11-13 17:32:44 UTC | 4.14, 4.16, 4.18-5.1 |
+| `aap-operator.v2.7.0-0.1794591166` | 2026-11-13 17:32:46 UTC | 4.14, 4.16, 4.18-5.1 |
