@@ -9,7 +9,7 @@ import csv
 import os
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ansible.module_utils.aap_operator_index import extract_operator_index
 
@@ -37,6 +37,30 @@ def find_matching_version(target_version, other_versions, threshold=10000):
             best_match = other
 
     return best_match
+
+
+def _parse_utc(value):
+    if not value:
+        return None
+    try:
+        when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when.astimezone(timezone.utc)
+
+
+def release_date(names, first_seen, now=None):
+    """Release Date for a newly added row: the earliest the build was seen, as a UTC date.
+
+    "Seen" is the Red Hat catalog API's first record of any of the row's bundles, or now
+    (this run just found it in an index), whichever is earlier. Using the run's clock alone
+    stamped rows a day late whenever the run happened after midnight UTC or hours late
+    (7 of the automation-added rows so far). The catalog record can trail the index by a few
+    minutes, which is why "now" stays a candidate.
+    """
+    now = now or datetime.now(timezone.utc)
+    seen = [t for t in (_parse_utc((first_seen or {}).get(n)) for n in names if n) if t]
+    return min(seen + [now]).strftime("%B %d, %Y")
 
 
 def read_csv_rows(csv_path):
@@ -153,13 +177,13 @@ def add_new_row(
     openshift_col,
     scope,
     version,
-    today_date,
+    row_date,
     existing_ocp,
 ):
     new_row = [""] * total_cols
     for i in range(1, total_cols + 1):
         if i == date_col:
-            new_row[i - 1] = today_date
+            new_row[i - 1] = row_date
         elif i == cluster_col and scope == "cluster":
             new_row[i - 1] = version
         elif i == namespace_col and scope == "namespace":
@@ -179,13 +203,13 @@ def add_new_row_pair(
     openshift_col,
     namespace_version,
     cluster_version,
-    today_date,
+    row_date,
     existing_ocp,
 ):
     new_row = [""] * total_cols
     for i in range(1, total_cols + 1):
         if i == date_col:
-            new_row[i - 1] = today_date
+            new_row[i - 1] = row_date
         elif i == cluster_col:
             new_row[i - 1] = cluster_version
         elif i == namespace_col:
@@ -230,13 +254,15 @@ def update_csv_for_aap(
     namespace_versions,
     cluster_versions,
     create_missing_csv=False,
+    release_dates=None,
 ):
     """Update one AAP_*.csv from the operator CSV names found in the stream's channels.
 
     namespace_versions / cluster_versions are the bundle names from the namespace- and
     cluster-scoped channels, merged across every OCP index read. If the CSV does not exist
     and create_missing_csv is set, it is created (header copied from the newest existing
-    AAP_*.csv) once the channels have builds.
+    AAP_*.csv) once the channels have builds. release_dates maps operator CSV names to the
+    catalog API's first-seen time (see release_date).
     """
     cluster_col = int(columns.get("cluster_scoped", 2))
     namespace_col = int(columns.get("namespace_scoped", 3))
@@ -298,7 +324,6 @@ def update_csv_for_aap(
             "csv_created": False,
         }
 
-    today_date = datetime.now().strftime("%B %d, %Y")
     total_cols = len(rows[0])
     existing_ns = get_existing_versions(rows, namespace_col)
     existing_cl = get_existing_versions(rows, cluster_col)
@@ -321,7 +346,8 @@ def update_csv_for_aap(
                 if row_num:
                     update_row_cell(rows, row_num, namespace_col, ns_version)
                     if not get_column_value(rows[row_num - 1], date_col):
-                        update_row_cell(rows, row_num, date_col, today_date)
+                        update_row_cell(rows, row_num, date_col,
+                                        release_date([ns_version, matching_cl], release_dates))
                     changed = True
                     rows_updated += 1
             else:
@@ -335,7 +361,7 @@ def update_csv_for_aap(
                     openshift_col,
                     ns_version,
                     matching_cl,
-                    today_date,
+                    release_date([ns_version, matching_cl], release_dates),
                     existing_ocp,
                 )
                 paired_cluster.add(matching_cl)
@@ -352,7 +378,7 @@ def update_csv_for_aap(
                 openshift_col,
                 "namespace",
                 ns_version,
-                today_date,
+                release_date([ns_version], release_dates),
                 existing_ocp,
             )
             changed = True
@@ -367,7 +393,8 @@ def update_csv_for_aap(
             if row_num:
                 update_row_cell(rows, row_num, cluster_col, cl_version)
                 if not get_column_value(rows[row_num - 1], date_col):
-                    update_row_cell(rows, row_num, date_col, today_date)
+                    update_row_cell(rows, row_num, date_col,
+                                    release_date([cl_version, matching_ns], release_dates))
             changed = True
             rows_updated += 1
         elif matching_ns:
@@ -387,7 +414,7 @@ def update_csv_for_aap(
                 openshift_col,
                 "cluster",
                 cl_version,
-                today_date,
+                release_date([cl_version], release_dates),
                 existing_ocp,
             )
             changed = True

@@ -57,11 +57,17 @@ aap_streams:
 bundle_count:
   description: Number of catalog bundle records read.
   type: int
+bundle_first_seen:
+  description:
+    - Earliest catalog record time (ISO 8601, UTC) per operator CSV name. Used as the
+      Release Date of newly added rows, so it doesn't depend on when the run happens.
+  type: dict
 '''
 
 import json
 import re
 import time
+from datetime import datetime, timezone
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six.moves.urllib.parse import urlencode
@@ -101,7 +107,7 @@ def fetch_bundles(module):
             "sort_by": "_id[asc]",
             "page_size": _PAGE_SIZE,
             "page": page,
-            "include": "data._id,data.csv_name,data.ocp_version,data.channel_name,total",
+            "include": "data._id,data.csv_name,data.ocp_version,data.channel_name,data.creation_date,total",
         })
         url = "%s?%s" % (p["catalog_api_url"], query)
         payload = _get_json(module, url)
@@ -112,6 +118,24 @@ def fetch_bundles(module):
         if len(data) < _PAGE_SIZE or (isinstance(total, int) and len(records) >= total):
             break
     return list(records.values())
+
+
+def first_seen_by_csv(records):
+    """Earliest creation_date per csv_name, as ISO 8601 UTC strings."""
+    first = {}
+    for rec in records:
+        name = str(rec.get("csv_name") or "").strip()
+        raw = str(rec.get("creation_date") or "").strip()
+        if not name or not raw:
+            continue
+        try:
+            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        when = when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when.astimezone(timezone.utc)
+        if name not in first or when < first[name]:
+            first[name] = when
+    return {name: when.isoformat() for name, when in first.items()}
 
 
 def run(module):
@@ -168,6 +192,7 @@ def run(module):
         "ocp_versions": sorted(ocp_versions, key=vkey),
         "aap_streams": aap_streams,
         "bundle_count": len(records),
+        "bundle_first_seen": first_seen_by_csv(records),
     }
 
 

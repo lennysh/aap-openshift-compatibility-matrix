@@ -50,6 +50,7 @@
       {{ aap_matrix_aap_streams
          if aap_matrix_aap_streams | length > 0
          else aap_matrix_discovery.aap_streams }}
+    aap_matrix_bundle_first_seen: "{{ aap_matrix_discovery.bundle_first_seen | default({}) }}"
 
 - name: Show OCP versions and AAP streams for this run
   ansible.builtin.debug:

@@ -27,6 +27,8 @@ Each run queries `https://catalog.redhat.com/api/containers/v1/operators/bundles
 
 The operator index images remain the source of truth for the data; the catalog only decides which tags and channels to read. Only the operator package's catalog (`/configs/<package>`) is copied out of each index, falling back to all of `/configs` if the package has no directory of its own. Extracts are cached under `.cache/operator-index/` for the duration of a run so an index read by `aap_csv_update` isn't pulled again by the OpenShift Support scrape.
 
+**Release Date** of a newly added row is the earliest of the catalog API's first record of its bundles and the time the run finds it, as a UTC date, so a late or after-midnight run doesn't stamp it a day late. Existing dates are never changed.
+
 OpenShift Support merge rules:
 
 - **Blank cell** — filled from min/max OCP index tags where the bundle appears.

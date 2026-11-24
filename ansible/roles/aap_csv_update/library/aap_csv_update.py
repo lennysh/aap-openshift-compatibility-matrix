@@ -63,6 +63,14 @@ options:
     required: false
     type: str
     default: registry.redhat.io
+  release_dates:
+    description:
+      - Operator CSV name -> first-seen time (ISO 8601) from the Red Hat catalog API
+        (aap_matrix_discover's bundle_first_seen). A new row's Release Date is the earliest
+        of its bundles' first-seen times and now, as a UTC date.
+    required: false
+    type: dict
+    default: {}
 author:
   - lennysh
 '''
@@ -187,6 +195,7 @@ def run(module):
         sorted(namespace_versions, key=version_key_from_csv),
         sorted(cluster_versions, key=version_key_from_csv),
         create_missing_csv=create_missing_csv,
+        release_dates=module.params.get("release_dates") or {},
     )
     where = "%d OCP tag%s" % (len(used), "" if len(used) == 1 else "s")
 
@@ -237,6 +246,7 @@ def main():
             index_cache_dir=dict(type="path", required=False),
             package_name=dict(type="str", default="ansible-automation-platform-operator"),
             registry=dict(type="str", default="registry.redhat.io"),
+            release_dates=dict(type="dict", default={}),
         ),
         supports_check_mode=False,
     )
