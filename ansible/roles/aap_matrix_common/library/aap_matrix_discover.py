@@ -12,7 +12,7 @@ short_description: Discover OCP versions and AAP channels for the AAP operator f
 description:
   - Queries the public Red Hat container catalog (Pyxis) for every bundle of the operator package.
   - Returns the OCP versions whose operator index carries the package, and one entry per AAP
-    stream (stable-X.Y + stable-X.Y-cluster-scoped channel pair) with the OCP index tags to read it from.
+    stream (stable-X.Y + stable-X.Y-cluster-scoped channel pair).
   - No registry credentials needed. The operator index images remain the source of truth for the
     actual data; this only decides which index tags and channels to look at.
 version_added: "1.1.0"
@@ -33,10 +33,6 @@ options:
     description: Ignore AAP streams older than this.
     type: str
     default: "2.4"
-  max_ocp_candidates:
-    description: How many of the newest OCP tags to offer per AAP stream (tried newest first).
-    type: int
-    default: 3
   timeout:
     description: HTTP timeout in seconds per request.
     type: int
@@ -58,7 +54,6 @@ aap_streams:
     aap_version: {description: "e.g. 2.7", type: str}
     namespace_channel: {description: "e.g. stable-2.7", type: str}
     cluster_channel: {description: "e.g. stable-2.7-cluster-scoped (empty if none)", type: str}
-    ocp_versions: {description: OCP tags carrying the channel, newest first, type: list}
 bundle_count:
   description: Number of catalog bundle records read.
   type: int
@@ -131,7 +126,7 @@ def run(module):
         )
 
     ocp_versions = set()
-    channel_ocps = {}  # channel -> set(ocp)
+    channels = set()
     for rec in records:
         ocp = str(rec.get("ocp_version") or "").strip()
         channel = str(rec.get("channel_name") or "").strip()
@@ -139,16 +134,15 @@ def run(module):
             continue
         ocp_versions.add(ocp)
         if channel:
-            channel_ocps.setdefault(channel, set()).add(ocp)
+            channels.add(channel)
 
     streams = {}
-    for channel, ocps in channel_ocps.items():
+    for channel in channels:
         m = _CHANNEL_RE.match(channel)
         if not m or vkey(m.group(1)) < min_aap:
             continue
-        s = streams.setdefault(m.group(1), {"namespace": None, "cluster": None, "ocps": set()})
+        s = streams.setdefault(m.group(1), {"namespace": None, "cluster": None})
         s["cluster" if m.group(2) else "namespace"] = channel
-        s["ocps"] |= ocps
 
     aap_streams = []
     for aap in sorted(streams, key=vkey):
@@ -160,7 +154,6 @@ def run(module):
             "aap_version": aap,
             "namespace_channel": s["namespace"],
             "cluster_channel": s["cluster"] or "",
-            "ocp_versions": sorted(s["ocps"], key=vkey, reverse=True)[: p["max_ocp_candidates"]],
         })
 
     if not ocp_versions or not aap_streams:
@@ -188,7 +181,6 @@ def main():
             ),
             min_ocp_version=dict(type="str", default="4.11"),
             min_aap_version=dict(type="str", default="2.4"),
-            max_ocp_candidates=dict(type="int", default=3),
             timeout=dict(type="int", default=60),
         ),
         supports_check_mode=True,

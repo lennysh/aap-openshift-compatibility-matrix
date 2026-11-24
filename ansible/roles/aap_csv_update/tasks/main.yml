@@ -1,7 +1,8 @@
 ---
 - name: Update AAP CSV versions from operator index
   aap_csv_update:
-    ocp_versions: "{{ item.ocp_versions }}"
+    # Every scanned OCP tag (prefetched), unless a manual stream override lists its own
+    ocp_versions: "{{ item.ocp_versions | default(aap_matrix_operator_index_ocp_versions) }}"
     aap_version: "{{ item.aap_version }}"
     namespace_channel: "{{ item.namespace_channel }}"
     cluster_channel: "{{ item.cluster_channel }}"
@@ -13,7 +14,7 @@
     registry: "{{ aap_matrix_registry }}"
   loop: "{{ aap_matrix_aap_streams }}"
   loop_control:
-    label: "AAP {{ item.aap_version }} (OCP {{ item.ocp_versions | join(' > ') }})"
+    label: "AAP {{ item.aap_version }}"
   register: aap_csv_update_loop
 
 - name: CSV update summary

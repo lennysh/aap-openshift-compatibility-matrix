@@ -24,9 +24,10 @@ aap_matrix_catalog_api_url: https://catalog.redhat.com/api/containers/v1/operato
 # Ignore anything older than these
 aap_matrix_min_ocp_version: "4.11"
 aap_matrix_min_aap_version: "2.4"
-# Per AAP stream, try this many of the newest OCP index tags carrying it (newest first;
-# falls back if a tag is listed in the catalog but its index isn't published yet)
-aap_matrix_max_ocp_candidates: 3
+# Pull this many operator indexes at once before the per-stream / per-OCP loops, which then
+# read them from the run cache. 0 disables prefetching. Each in-flight index needs a few GB of
+# container storage until it is extracted and removed.
+aap_matrix_prefetch_workers: 3
 # Create data/AAP_<ver>.csv (header copied from the newest existing CSV) when a new
 # AAP stream appears
 aap_matrix_create_missing_csv: true
@@ -37,7 +38,7 @@ aap_matrix_create_missing_csv: true
 #     - aap_version: "2.7"
 #       namespace_channel: stable-2.7
 #       cluster_channel: stable-2.7-cluster-scoped
-#       ocp_versions: ["4.20", "4.18"]   # tried in order
+#       ocp_versions: ["4.20", "4.18"]   # optional; default: every OCP tag scanned
 aap_matrix_operator_index_ocp_versions: []
 aap_matrix_aap_streams: []
 

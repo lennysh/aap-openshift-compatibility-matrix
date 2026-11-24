@@ -10,14 +10,15 @@ DOCUMENTATION = r'''
 module: aap_csv_update
 short_description: Update one AAP matrix CSV from the operator index for one AAP stream
 description:
-  - Pulls (or reuses cached) the operator index for the first available OCP tag in
-    ocp_versions and updates one AAP_*.csv file.
+  - Reads the stream's channels from every OCP index tag in ocp_versions (pulled, or
+    reused from the run cache), merges them, and updates one AAP_*.csv file.
   - Use in an Ansible loop over aap_matrix_aap_streams for live progress.
 version_added: "1.0.0"
 options:
   ocp_versions:
     description:
-      - OCP index tags to read the channels from, tried in order (newest first).
+      - OCP index tags to read the channels from. All of them are read and merged, since a
+        release can ship to any subset of them.
       - A tag whose index is not published yet is skipped; any other pull failure fails the task.
     required: true
     type: list
@@ -95,12 +96,12 @@ rows_added:
 rows_updated:
   description: Rows updated in the CSV.
   type: int
-index_cache_hit:
-  description: True if operator index was reused from cache for this OCP.
-  type: bool
-ocp_version:
-  description: OCP index tag actually used.
-  type: str
+ocp_versions_read:
+  description: OCP index tags whose channels were read and merged.
+  type: list
+ocp_versions_not_published:
+  description: Listed OCP index tags whose index image isn't published yet (skipped).
+  type: list
 csv_created:
   description: True if the CSV file was created by this run.
   type: bool
@@ -114,6 +115,10 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.aap_csv_matrix import (
     ensure_operator_index_dir,
     update_csv_for_aap,
+)
+from ansible.module_utils.aap_operator_index import (
+    extract_csv_versions_from_dir,
+    version_key_from_csv,
 )
 
 
@@ -137,19 +142,16 @@ def run(module):
     if not namespace_channel:
         module.fail_json(msg="namespace_channel is required for AAP %s" % aap_version)
 
-    # Read EVERY candidate tag and merge, rather than stopping at the first one that
-    # pulls. Discovery lists a tag if any bundle of the stream ever shipped there, so
-    # the newest tag can hold a single stale bundle (e.g. AAP 2.6 on 4.23 has only a
-    # Sept build) while new releases land only on older tags. update_csv_for_aap skips
-    # versions already in the CSV, so applying it once per tag is idempotent.
-    not_published = []
+    # Read the stream's channels from EVERY listed OCP index and merge them. Every tag is
+    # scraped for OpenShift Support anyway (and prefetched into the run cache), and a new
+    # release can land on any subset of them: e.g. the newest index carrying AAP 2.6 (4.23)
+    # holds a single September build while new 2.6 releases ship only to 4.22 and older.
+    namespace_versions = set()
+    cluster_versions = set()
     used = []
-    cache_hit = True
-    pulled_any = False
-    result = None
-    totals = {"changed": False, "rows_added": 0, "rows_updated": 0, "csv_created": False}
+    not_published = []
     for tag in ocp_versions:
-        index_dir, pulled, index_status = ensure_operator_index_dir(
+        index_dir, _, index_status = ensure_operator_index_dir(
             module, tag, cache_dir, registry, package_name
         )
         if index_dir is None:
@@ -161,85 +163,61 @@ def run(module):
                 % (tag, index_status)
             )
         try:
-            r = update_csv_for_aap(
-                module,
-                index_dir,
-                data_dir,
-                columns,
-                aap_version,
-                namespace_channel,
-                cluster_channel,
-                package_name,
-                create_missing_csv=create_missing_csv,
-            )
+            namespace_versions.update(extract_csv_versions_from_dir(
+                index_dir, package_name, channel=namespace_channel)[0])
+            if cluster_channel:
+                cluster_versions.update(extract_csv_versions_from_dir(
+                    index_dir, package_name, channel=cluster_channel)[0])
         finally:
             if not cache_dir:
                 shutil.rmtree(index_dir, ignore_errors=True)
         used.append(tag)
-        cache_hit = cache_hit and index_status == "cached"
-        pulled_any = pulled_any or pulled
-        if r.get("skip_reason") == "csv_not_found":
-            result = r
-            break  # same answer for every tag
-        if r.get("skip_reason") is None:
-            for k in ("changed", "csv_created"):
-                totals[k] = totals[k] or bool(r.get(k))
-            for k in ("rows_added", "rows_updated"):
-                totals[k] += r[k]
-            result = dict(r, **totals)
-        elif result is None or result.get("skip_reason"):
-            result = r  # keep a skip reason only if no tag produced a real update
 
     if not used:
         module.fail_json(
             msg="None of the operator index tags for AAP %s are published: %s"
             % (aap_version, ", ".join(not_published))
         )
-    ocp_version = "+".join(used)
-    pulled = pulled_any
+
+    result = update_csv_for_aap(
+        module,
+        data_dir,
+        columns,
+        aap_version,
+        sorted(namespace_versions, key=version_key_from_csv),
+        sorted(cluster_versions, key=version_key_from_csv),
+        create_missing_csv=create_missing_csv,
+    )
+    where = "%d OCP tag%s" % (len(used), "" if len(used) == 1 else "s")
 
     csv_name = "AAP_%s.csv" % aap_version.replace(".", "")
     skip = result.get("skip_reason")
     if skip == "csv_not_found":
-        msg = "OCP %s AAP %s: skipped (%s not found)" % (ocp_version, aap_version, csv_name)
+        msg = "AAP %s (%s): skipped (%s not found)" % (aap_version, where, csv_name)
         module.warn(msg)
     elif skip == "no_versions_in_index":
-        msg = "OCP %s AAP %s: no operator CSVs in index channels" % (ocp_version, aap_version)
+        msg = "AAP %s (%s): no operator CSVs in index channels" % (aap_version, where)
     elif skip == "empty_csv":
-        msg = "OCP %s AAP %s: %s is empty" % (ocp_version, aap_version, csv_name)
+        msg = "AAP %s (%s): %s is empty" % (aap_version, where, csv_name)
     elif skip == "no_template_csv":
-        msg = "OCP %s AAP %s: cannot create %s (no existing AAP_*.csv to copy the header from)" % (
-            ocp_version, aap_version, csv_name)
+        msg = "AAP %s (%s): cannot create %s (no existing AAP_*.csv to copy the header from)" % (
+            aap_version, where, csv_name)
         module.warn(msg)
     elif result["changed"]:
         msg = (
-            ("OCP %s AAP %s: CREATED %s (+%d rows, ~%d rows)%s" if result.get("csv_created")
-             else "OCP %s AAP %s: updated %s (+%d rows, ~%d rows)%s")
-            % (
-                ocp_version,
-                aap_version,
-                csv_name,
-                result["rows_added"],
-                result["rows_updated"],
-                " [index cached]" if cache_hit else "",
-            )
+            ("AAP %s (%s): CREATED %s (+%d rows, ~%d rows)" if result.get("csv_created")
+             else "AAP %s (%s): updated %s (+%d rows, ~%d rows)")
+            % (aap_version, where, csv_name, result["rows_added"], result["rows_updated"])
         )
     else:
-        msg = "OCP %s AAP %s: %s up to date%s" % (
-            ocp_version,
-            aap_version,
-            csv_name,
-            " [index cached]" if cache_hit else "",
-        )
+        msg = "AAP %s (%s): %s up to date" % (aap_version, where, csv_name)
 
     return {
         "changed": result["changed"],
         "msg": msg,
         "rows_added": result["rows_added"],
         "rows_updated": result["rows_updated"],
-        "index_cache_hit": cache_hit,
-        "index_pulled": pulled and not cache_hit,
-        "ocp_version": ocp_version,
+        "ocp_versions_read": used,
         "ocp_versions_not_published": not_published,
         "aap_version": aap_version,
         "csv_created": bool(result.get("csv_created")),

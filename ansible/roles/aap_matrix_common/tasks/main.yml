@@ -37,7 +37,6 @@
     catalog_api_url: "{{ aap_matrix_catalog_api_url }}"
     min_ocp_version: "{{ aap_matrix_min_ocp_version }}"
     min_aap_version: "{{ aap_matrix_min_aap_version }}"
-    max_ocp_candidates: "{{ aap_matrix_max_ocp_candidates }}"
   register: aap_matrix_discovery
 
 - name: Use discovered OCP versions and AAP streams (manual overrides win)
@@ -59,3 +58,21 @@
       - >-
         AAP streams: {{ aap_matrix_aap_streams
           | map(attribute='aap_version') | join(', ') }}
+
+# Pull every index tag up front, several at a time, into the run cache. aap_csv_update and the
+# OpenShift Support scrape then read them from the cache instead of pulling one by one. Any tag
+# that fails here is simply pulled by those tasks as before.
+- name: Prefetch operator indexes in parallel
+  when: aap_matrix_prefetch_workers | int > 0
+  aap_operator_index_prefetch:
+    ocp_versions: "{{ aap_matrix_operator_index_ocp_versions }}"
+    package_name: "{{ aap_matrix_operator_package }}"
+    registry: "{{ aap_matrix_registry }}"
+    index_cache_dir: "{{ aap_matrix_index_cache_dir }}"
+    workers: "{{ aap_matrix_prefetch_workers }}"
+  register: aap_matrix_prefetch
+
+- name: Show prefetch results
+  when: aap_matrix_prefetch is not skipped
+  ansible.builtin.debug:
+    msg: "{{ [aap_matrix_prefetch.msg] + (aap_matrix_prefetch.results | map(attribute='line') | list) }}"
