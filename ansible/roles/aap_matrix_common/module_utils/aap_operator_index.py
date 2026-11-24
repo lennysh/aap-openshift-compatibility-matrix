@@ -76,14 +76,22 @@ def extract_operator_index(module, ocp_version, registry="registry.redhat.io"):
 
 
 def iter_olm_channel_objects(content):
+    """Yield each top-level JSON value of a file-based catalog (concatenated objects).
+
+    Decodes in place via raw_decode's start index: slicing off the remaining text for
+    every object copies the file once per object, which on an ~85 MB AAP catalog made
+    parsing ~14x slower.
+    """
     decoder = json.JSONDecoder()
     idx = 0
-    while idx < len(content):
-        obj, end = decoder.raw_decode(content[idx:])
-        idx += end
-        yield obj
-        while idx < len(content) and content[idx] in " \t\n\r":
+    end = len(content)
+    while True:
+        while idx < end and content[idx] in " \t\n\r":
             idx += 1
+        if idx >= end:
+            return
+        obj, idx = decoder.raw_decode(content, idx)
+        yield obj
 
 
 def extract_csv_versions_from_dir(tmp_dir, package_name, channel=None):
@@ -103,10 +111,10 @@ def extract_csv_versions_from_dir(tmp_dir, package_name, channel=None):
             config_json_files += 1
             path = os.path.join(root, fname)
             try:
-                with open(path, "r", encoding="utf-8") as fp:
+                with open(path, "r", encoding="utf-8-sig") as fp:
                     content = fp.read()
                 for obj in iter_olm_channel_objects(content):
-                    if obj.get("schema") != "olm.channel":
+                    if not isinstance(obj, dict) or obj.get("schema") != "olm.channel":
                         continue
                     if obj.get("package") != package_name:
                         continue
