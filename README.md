@@ -23,7 +23,7 @@ The core of this repository is a simple, automated workflow designed for clarity
 
 1.  **Raw Data**: All version information is maintained in `data/AAP_2x.csv` files. These are the single source of truth for the entire repository and the only files that should be edited manually.
 
-2.  **Scheduled Updates**: The [Update AAP CSV matrix](.github/workflows/update-csv-matrix.yml) workflow runs every 6 hours. It scrapes the Red Hat operator indexes with the Ansible playbook in [`ansible/`](ansible/README.md), adds any new operator releases to the CSVs, regenerates the Markdown tables and the [OCP index coverage report](./OCP_INDEX_COVERAGE.md), and pushes everything in a single commit.
+2.  **Scheduled Updates**: The [Update AAP CSV matrix](.github/workflows/update-csv-matrix.yml) workflow checks the public Red Hat catalog every hour. When its AAP bundle listing changed (and at least once a day regardless), it scrapes the Red Hat operator indexes with the Ansible playbook in [`ansible/`](ansible/README.md), adds any new operator releases to the CSVs, regenerates the Markdown tables and the [OCP index coverage report](./OCP_INDEX_COVERAGE.md), and pushes everything in a single commit.
 
 3.  **Manual Edits**: When a CSV is edited by hand and pushed to `main`, the [Update Compatibility Markdown Tables](.github/workflows/update-compatibility-md-tables.yml) workflow regenerates the Markdown tables.
 

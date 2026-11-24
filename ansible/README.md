@@ -69,6 +69,8 @@ ansible-playbook playbook.yml
 
 Workflow **Update AAP CSV matrix** (`.github/workflows/update-csv-matrix.yml`) runs the playbook, regenerates the markdown tables, README version list and `OCP_INDEX_COVERAGE.md`, and commits everything in one commit.
 
+It is scheduled hourly but gated: `scripts/catalog-fingerprint.py` hashes the catalog API's AAP bundle listing (a few HTTP requests, no registry access), and the full scrape only runs if that fingerprint hasn't been processed yet today (UTC). The "processed" marker is an Actions cache entry saved after a successful push, so the first run each day always does a full scrape, and a failed, skipped or conflicting run is retried the next hour. Manual runs and pushes that change the playbook or workflow always run in full.
+
 Required secrets: `REGISTRY_USERNAME`, `REGISTRY_PASSWORD`.
 
 ## Shared variables (`aap_matrix_*`)

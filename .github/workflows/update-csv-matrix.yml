@@ -1,7 +1,15 @@
 # Update AAP operator CSV compatibility matrix from Red Hat operator index,
 # regenerate the markdown tables and OCP index coverage report, and push
 # everything back to main in one commit.
-# Runs every 6 hours or when manually triggered.
+#
+# Checks hourly, but the full operator-index scrape only runs when:
+#   - the Red Hat catalog API's AAP bundle listing changed since the last full run, or
+#   - no full run has succeeded yet today (UTC); the API doesn't show every coverage
+#     change, so this is the daily catch-all, or
+#   - the run was started by hand, or by a push that changed the playbook or this workflow.
+# "Already processed" is an Actions cache entry keyed by UTC date + catalog fingerprint,
+# saved only once a full run has pushed (or had nothing to push). A run that fails, is
+# skipped, or is cancelled while queued is therefore simply retried the next hour.
 #
 # Required repo secrets: REGISTRY_USERNAME, REGISTRY_PASSWORD (Red Hat registry credentials)
 
@@ -9,9 +17,17 @@ name: Update AAP CSV matrix
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ansible/**'
+      - 'scripts/catalog-fingerprint.py'
+      - '.github/workflows/update-csv-matrix.yml'
   schedule:
-    # Every 6 hours, with one run at 23:30 UTC (right before midnight)
-    - cron: '30 23,5,11,17 * * *'
+    # Hourly, at an off-peak minute (scheduled runs at the top of the hour are the most
+    # likely to be delayed or dropped). Most runs stop after the catalog check.
+    - cron: '37 * * * *'
 
 permissions:
   contents: write
@@ -30,18 +46,60 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Fingerprint the Red Hat catalog
+        id: catalog
+        run: |
+          if out=$(python3 scripts/catalog-fingerprint.py); then
+            fp="${out#fingerprint=}"
+            echo "key=catalog-$(date -u +%F)-${fp:0:16}" >> "$GITHUB_OUTPUT"
+            echo "Catalog fingerprint: ${fp:0:16}"
+          else
+            echo "::warning::Red Hat catalog API unavailable"
+          fi
+
+      - name: Check whether this catalog state was already processed today
+        id: seen
+        if: steps.catalog.outputs.key != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: .catalog-processed
+          key: ${{ steps.catalog.outputs.key }}
+          lookup-only: true
+
+      - name: Decide whether to run the full scrape
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          KEY: ${{ steps.catalog.outputs.key }}
+          SEEN: ${{ steps.seen.outputs.cache-hit }}
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            run=true;  why="started by $EVENT"
+          elif [ -z "$KEY" ]; then
+            run=false; why="catalog API unavailable; will retry next hour"
+          elif [ "$SEEN" = "true" ]; then
+            run=false; why="catalog unchanged since today's last full run"
+          else
+            run=true;  why="catalog changed, or first full run today"
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "Full scrape: $run ($why)"
+
       - name: Install Podman
+        if: steps.decide.outputs.run == 'true'
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y podman
 
       - name: Set up Python
+        if: steps.decide.outputs.run == 'true'
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
       - name: Install Ansible
+        if: steps.decide.outputs.run == 'true'
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
@@ -49,6 +107,7 @@ jobs:
 
       # Use Red Hat action so login works with rootless podman on runners; avoids password in playbook logs
       - name: Log in to Red Hat container registry
+        if: steps.decide.outputs.run == 'true'
         uses: redhat-actions/podman-login@v2
         with:
           registry: registry.redhat.io
@@ -56,17 +115,22 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Run Ansible playbook
+        if: steps.decide.outputs.run == 'true'
         working-directory: ansible
         run: ansible-playbook playbook.yml -i inventory.yml -e "ansible_python_interpreter=$(command -v python)"
 
       # Always regenerate so markdown also self-heals if it ever drifted from the CSVs
       - name: Generate Markdown tables from CSV
+        if: steps.decide.outputs.run == 'true'
         run: ./scripts/generate-md-tables.sh
 
       - name: Generate OCP index coverage report
+        if: steps.decide.outputs.run == 'true'
         run: python scripts/csv-overlaps-to-markdown.py scripts/csv-overlaps.json -o OCP_INDEX_COVERAGE.md
 
       - name: Commit and push changes
+        id: commit
+        if: steps.decide.outputs.run == 'true'
         run: |
           set -euo pipefail
           git config --local user.email "action@github.com"
@@ -75,9 +139,43 @@ jobs:
           git add data/*.csv AAP_*.md OCP_INDEX_COVERAGE.md README.md
           if git diff --staged --quiet; then
             echo "No CSV or markdown changes. Nothing to commit."
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git commit -m "chore: update AAP CSV matrix and markdown tables"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          # Other workflows also push data/*.csv changes, sometimes to the same rows. If
+          # main moved underneath this run, rebase; on a real conflict don't fail the run,
+          # just leave this catalog state unrecorded so the next hourly run redoes it.
+          for attempt in 1 2 3; do
+            if ! git pull --rebase origin main; then
+              git rebase --abort || true
+              echo "::warning::Conflicting change on main; not pushed, will retry next hour"
+              echo "pushed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if git push origin HEAD:main; then
+              echo "pushed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          echo "::warning::Push failed 3 times; will retry next hour"
+          echo "pushed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Record this catalog state as processed
+        if: >-
+          steps.decide.outputs.run == 'true' && steps.commit.outputs.pushed == 'true'
+          && steps.catalog.outputs.key != '' && steps.seen.outputs.cache-hit != 'true'
+        run: date -u > .catalog-processed
+
+      - name: Save processed marker
+        if: >-
+          steps.decide.outputs.run == 'true' && steps.commit.outputs.pushed == 'true'
+          && steps.catalog.outputs.key != '' && steps.seen.outputs.cache-hit != 'true'
+        # A concurrent run may have saved the same key already; that's fine
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: .catalog-processed
+          key: ${{ steps.catalog.outputs.key }}
