@@ -14,7 +14,7 @@ The playbook runs three roles in order:
 
 | Role | Purpose |
 |------|---------|
-| `aap_matrix_common` | Podman check, registry login, shared variables, and **discovery** of OCP versions and AAP channels from the public Red Hat catalog API |
+| `aap_matrix_common` | Podman check, registry login, shared variables, **discovery** of OCP versions and AAP channels from the public Red Hat catalog API, and a parallel **prefetch** of every index into the run cache |
 | `aap_csv_update` | For each AAP stream, read its channels from the newest published OCP index and add missing operator CSV rows (creating `data/AAP_<ver>.csv` for a new stream) |
 | `aap_openshift_support` | Scrape all discovered OCP index tags, update **OpenShift Support** ranges on every `data/AAP_*.csv` |
 
@@ -82,12 +82,17 @@ Edit **`roles/aap_matrix_common/defaults/main.yml`**:
 | `aap_matrix_min_ocp_version` | Oldest OCP version to scan (default `4.11`) |
 | `aap_matrix_min_aap_version` | Oldest AAP stream to track (default `2.4`) |
 | `aap_matrix_max_ocp_candidates` | Newest OCP tags tried per AAP stream (default `3`) |
+| `aap_matrix_prefetch_workers` | Operator indexes pulled at once into the run cache before the loops (default `3`, `0` = off) |
 | `aap_matrix_create_missing_csv` | Create `data/AAP_<ver>.csv` for a newly discovered AAP stream (default `true`) |
 | `aap_matrix_operator_index_ocp_versions` | Manual override of the OCP tags to scan (empty = discover) |
 | `aap_matrix_aap_streams` | Manual override of the AAP streams (empty = discover); see the commented example in defaults |
 | `aap_matrix_columns` | CSV column indices |
 
 ## Modules
+
+### `aap_operator_index_prefetch` (role `aap_matrix_common`)
+
+Pulls every discovered OCP index tag, `aap_matrix_prefetch_workers` at a time, and extracts the package's catalog into the run cache. The later per-stream and per-OCP loops then read each index from the cache. It is only an accelerator: a tag that fails here is pulled by those loops exactly as without it, and extracts are moved into place only once complete.
 
 ### `aap_csv_update` (role `aap_csv_update`)
 
