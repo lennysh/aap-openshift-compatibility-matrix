@@ -66,41 +66,57 @@ bundle_count:
 
 import json
 import re
+import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.urls import open_url
 
 _CHANNEL_RE = re.compile(r"^stable-(\d+\.\d+)(-cluster-scoped)?$")
-_PAGE_SIZE = 100
+_PAGE_SIZE = 500
 _MAX_PAGES = 200
+_ATTEMPTS = 3
 
 
 def vkey(v):
     return tuple(int(p) for p in str(v).split(".") if p.isdigit())
 
 
+def _get_json(module, url):
+    """GET url as JSON, retrying transient failures (response times vary 4-35 s)."""
+    for attempt in range(1, _ATTEMPTS + 1):
+        try:
+            resp = open_url(url, timeout=module.params["timeout"], headers={"Accept": "application/json"})
+            return json.loads(resp.read())
+        except Exception as exc:  # noqa: BLE001 - surface any transport/parse error clearly
+            if attempt == _ATTEMPTS:
+                module.fail_json(msg="Red Hat catalog API request failed: %s" % exc, url=url)
+            module.warn("Red Hat catalog API request failed (attempt %d), retrying: %s" % (attempt, exc))
+            time.sleep(5 * attempt)
+
+
 def fetch_bundles(module):
     p = module.params
-    records = []
+    records = {}
     for page in range(_MAX_PAGES):
         query = urlencode({
             "filter": "package==%s" % p["package_name"],
+            # Without an explicit sort the API pages inconsistently: one run returned
+            # 2,035 records but only 2,014 distinct ones (21 duplicated, 21 never seen)
+            "sort_by": "_id[asc]",
             "page_size": _PAGE_SIZE,
             "page": page,
-            "include": "data.csv_name,data.ocp_version,data.channel_name,total",
+            "include": "data._id,data.csv_name,data.ocp_version,data.channel_name,total",
         })
         url = "%s?%s" % (p["catalog_api_url"], query)
-        try:
-            resp = open_url(url, timeout=p["timeout"], headers={"Accept": "application/json"})
-            payload = json.loads(resp.read())
-        except Exception as exc:  # noqa: BLE001 - surface any transport/parse error clearly
-            module.fail_json(msg="Red Hat catalog API request failed: %s" % exc, url=url)
+        payload = _get_json(module, url)
         data = payload.get("data") or []
-        records.extend(data)
-        if len(data) < _PAGE_SIZE:
+        for rec in data:
+            records[rec.get("_id") or len(records)] = rec
+        total = payload.get("total")
+        if len(data) < _PAGE_SIZE or (isinstance(total, int) and len(records) >= total):
             break
-    return records
+    return list(records.values())
 
 
 def run(module):

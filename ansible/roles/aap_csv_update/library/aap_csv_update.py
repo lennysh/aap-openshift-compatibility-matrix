@@ -150,7 +150,7 @@ def run(module):
     totals = {"changed": False, "rows_added": 0, "rows_updated": 0, "csv_created": False}
     for tag in ocp_versions:
         index_dir, pulled, index_status = ensure_operator_index_dir(
-            module, tag, cache_dir, registry
+            module, tag, cache_dir, registry, package_name
         )
         if index_dir is None:
             if index_status == "tag_not_found":

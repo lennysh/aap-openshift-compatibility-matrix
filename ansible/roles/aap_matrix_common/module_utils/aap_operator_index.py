@@ -13,6 +13,12 @@ import subprocess
 import tempfile
 
 
+# podman pull has no timeout of its own: when registry blob downloads stall (seen locally
+# at ~1 KB/s for 13+ minutes) a pull hangs until the job is killed. An index normally
+# pulls in under a minute.
+PULL_TIMEOUT = 900
+
+
 def version_key(version):
     parts = version.strip().split(".")
     return tuple(int(p) for p in parts if p.isdigit())
@@ -34,12 +40,64 @@ def run_command(module, cmd, check_rc=True):
     return result.returncode, result.stdout, result.stderr
 
 
-def extract_operator_index(module, ocp_version, registry="registry.redhat.io"):
-    """Pull operator index image and extract /configs. Returns temp dir or None."""
+def _warn_if_no_json(module, pkg_dir, ocp_version):
+    """The parsers only read .json; say so loudly if a catalog is YAML-only."""
+    names = [f for _, _, files in os.walk(pkg_dir) for f in files]
+    if names and not any(f.endswith(".json") for f in names):
+        module.warn(
+            "OCP %s: %s has no .json catalog files (found: %s); only JSON is parsed"
+            % (ocp_version, pkg_dir, ", ".join(sorted(names)[:5]))
+        )
+
+
+def copy_index_configs(module, container_id, ocp_version, dest_dir, package_name=None):
+    """Copy the index's file-based catalog from a created container into dest_dir.
+
+    With package_name, copies only /configs/<package_name> (the AAP catalog is ~85 MB
+    of a ~230 MB /configs in v4.18), falling back to the whole /configs if the package
+    has no directory of its own. Returns True on success.
+    """
+    if package_name:
+        result = subprocess.run(
+            ["podman", "cp", "%s:/configs/%s" % (container_id, package_name), dest_dir],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            _warn_if_no_json(module, os.path.join(dest_dir, package_name), ocp_version)
+            return True
+        if not re.search(r"could not be found|no such file", result.stderr or "", re.IGNORECASE):
+            module.warn(
+                "Failed to copy /configs/%s for OCP %s: %s"
+                % (package_name, ocp_version, (result.stderr or "").strip())
+            )
+            return False
+        # No per-package directory: fall through and copy everything
+    cp_result = subprocess.run(
+        "podman cp %s:/configs - | tar -x -C %s" % (container_id, dest_dir),
+        shell=True,
+        capture_output=True,
+    )
+    return cp_result.returncode == 0
+
+
+def extract_operator_index(module, ocp_version, registry="registry.redhat.io", package_name=None):
+    """Pull operator index image and extract its catalog. Returns (temp dir or None, status).
+
+    Pass package_name to copy only that package's catalog (see copy_index_configs).
+    """
     image = "%s/redhat/redhat-operator-index:v%s" % (registry, ocp_version)
     tmp_dir = tempfile.mkdtemp()
 
-    rc, _, err = run_command(module, ["podman", "pull", image], check_rc=False)
+    try:
+        pulled = subprocess.run(
+            ["podman", "pull", image], capture_output=True, text=True, timeout=PULL_TIMEOUT
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        module.warn("Pull of %s timed out after %ds" % (image, PULL_TIMEOUT))
+        return None, "pull_timeout"
+    rc, err = pulled.returncode, pulled.stderr
     if rc != 0:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         # A tag that isn't published yet (e.g. a future OCP release listed ahead of GA)
@@ -58,14 +116,10 @@ def extract_operator_index(module, ocp_version, registry="registry.redhat.io"):
         return None, "create_failed"
 
     container_id = result.stdout.strip()
-    cp_result = subprocess.run(
-        "podman cp %s:/configs - | tar -x -C %s" % (container_id, tmp_dir),
-        shell=True,
-        capture_output=True,
-    )
+    copied = copy_index_configs(module, container_id, ocp_version, tmp_dir, package_name)
     subprocess.run(["podman", "rm", "-v", container_id], capture_output=True)
 
-    if cp_result.returncode != 0:
+    if not copied:
         module.warn("Failed to extract configs for OCP %s" % ocp_version)
         subprocess.run(["podman", "rmi", image], capture_output=True)
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -76,14 +130,22 @@ def extract_operator_index(module, ocp_version, registry="registry.redhat.io"):
 
 
 def iter_olm_channel_objects(content):
+    """Yield each top-level JSON value of a file-based catalog (concatenated objects).
+
+    Decodes in place via raw_decode's start index: slicing off the remaining text for
+    every object copies the file once per object, which on an ~85 MB AAP catalog made
+    parsing ~14x slower.
+    """
     decoder = json.JSONDecoder()
     idx = 0
-    while idx < len(content):
-        obj, end = decoder.raw_decode(content[idx:])
-        idx += end
-        yield obj
-        while idx < len(content) and content[idx] in " \t\n\r":
+    end = len(content)
+    while True:
+        while idx < end and content[idx] in " \t\n\r":
             idx += 1
+        if idx >= end:
+            return
+        obj, idx = decoder.raw_decode(content, idx)
+        yield obj
 
 
 def extract_csv_versions_from_dir(tmp_dir, package_name, channel=None):
@@ -103,10 +165,10 @@ def extract_csv_versions_from_dir(tmp_dir, package_name, channel=None):
             config_json_files += 1
             path = os.path.join(root, fname)
             try:
-                with open(path, "r", encoding="utf-8") as fp:
+                with open(path, "r", encoding="utf-8-sig") as fp:
                     content = fp.read()
                 for obj in iter_olm_channel_objects(content):
-                    if obj.get("schema") != "olm.channel":
+                    if not isinstance(obj, dict) or obj.get("schema") != "olm.channel":
                         continue
                     if obj.get("package") != package_name:
                         continue
@@ -172,7 +234,9 @@ def scrape_all_csv_versions(
     if cached:
         tmp_dir, status = cached, "ok"
     else:
-        tmp_dir, status = extract_operator_index(module, ocp_version, registry=registry)
+        tmp_dir, status = extract_operator_index(
+            module, ocp_version, registry=registry, package_name=package_name
+        )
     if tmp_dir is None:
         return {
             "status": status,

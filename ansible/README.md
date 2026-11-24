@@ -25,7 +25,7 @@ Each run queries `https://catalog.redhat.com/api/containers/v1/operators/bundles
 - **OCP versions** to scan: every OCP version the catalog lists for the package, from `aap_matrix_min_ocp_version` up.
 - **AAP streams**: every `stable-X.Y` / `stable-X.Y-cluster-scoped` channel pair from `aap_matrix_min_aap_version` up, each with the newest OCP tags that carry it (tried newest first; a tag listed in the catalog whose index image isn't published yet is skipped).
 
-The operator index images remain the source of truth for the data; the catalog only decides which tags and channels to read. Index extracts are cached under `.cache/operator-index/` for the duration of a run so an index read by `aap_csv_update` isn't pulled again by the OpenShift Support scrape.
+The operator index images remain the source of truth for the data; the catalog only decides which tags and channels to read. Only the operator package's catalog (`/configs/<package>`) is copied out of each index, falling back to all of `/configs` if the package has no directory of its own. Extracts are cached under `.cache/operator-index/` for the duration of a run so an index read by `aap_csv_update` isn't pulled again by the OpenShift Support scrape.
 
 OpenShift Support merge rules:
 
