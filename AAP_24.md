@@ -35,12 +35,12 @@
 | March 16, 2026 | aap-operator.v2.4.0-0.1773417703 | aap-operator.v2.4.0-0.1773412457 | 4.12-4.20 | 4.5.31 | 1.6.3 | 6.2.20 | 1.0.9 | 4.9.6 | 2.4.260225 | [Release Notes](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.4/html-single/red_hat_ansible_automation_platform_release_notes/index#async-2.4-20260225) |  |
 | April 01, 2026 | aap-operator.v2.4.0-0.1774582128 | aap-operator.v2.4.0-0.1774577278 | 4.12-4.20 | 4.5.32 | 1.6.4 | 6.2.20 | 1.0.11 | 4.9.7 | 2.4.260325 | [Release Notes](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.4/html-single/red_hat_ansible_automation_platform_release_notes/index#async-24-20260325) |  |
 | May 04, 2026 | aap-operator.v2.4.0-0.1777401109 | aap-operator.v2.4.0-0.1777394675 | 4.12-4.20 | 4.5.33 | 1.6.4 | 6.2.20 | 1.0.11 | 4.9.8 | 2.4.260325 | [Release Notes](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.4/html-single/red_hat_ansible_automation_platform_release_notes/index#async-24-20260422) |  |
-| July 21, 2026 | aap-operator.v2.4.0-0.1784076997 | aap-operator.v2.4.0-0.1784071413 | 4.11-4.20 | 4.5.34 | 1.6.4 | 6.2.22 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
+| July 20, 2026 | aap-operator.v2.4.0-0.1784076997 | aap-operator.v2.4.0-0.1784071413 | 4.11-4.20 | 4.5.34 | 1.6.4 | 6.2.22 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
 | August 05, 2026 | aap-operator.v2.4.0-0.1785432057 | aap-operator.v2.4.0-0.1785427615 | 4.11-4.20 | 4.5.35 | 1.6.4 | 6.2.22 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
 | August 25, 2026 | aap-operator.v2.4.0-0.1787241496 | aap-operator.v2.4.0-0.1787235954 | 4.11-4.20 | 4.5.35 | 1.6.4 | 6.2.22 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
 | September 24, 2026 | aap-operator.v2.4.0-0.1789667225 | aap-operator.v2.4.0-0.1789660429 | 4.11-4.20 | 4.5.36 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
-| October 20, 2026 | aap-operator.v2.4.0-0.1791968974 | aap-operator.v2.4.0-0.1791963300 | 4.11-4.20 | 4.5.37 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
+| October 19, 2026 | aap-operator.v2.4.0-0.1791968974 | aap-operator.v2.4.0-0.1791963300 | 4.11-4.20 | 4.5.37 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
 | October 29, 2026 | aap-operator.v2.4.0-0.1793169998 | aap-operator.v2.4.0-0.1793164232 | 4.11-4.20 | 4.5.37 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
-| October 31, 2026 | aap-operator.v2.4.0-0.1793319519 | aap-operator.v2.4.0-0.1793314410 | 4.11-4.20 | 4.5.37 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
+| October 30, 2026 | aap-operator.v2.4.0-0.1793319519 | aap-operator.v2.4.0-0.1793314410 | 4.11-4.20 | 4.5.37 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
 | November 12, 2026 | aap-operator.v2.4.0-0.1793887686 | aap-operator.v2.4.0-0.1793880845 | 4.11-4.20 | 4.5.38 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
 | November 23, 2026 | aap-operator.v2.4.0-0.1794390285 | aap-operator.v2.4.0-0.1794385968 | 4.11-4.20 | 4.5.39 | 1.6.4 | 6.2.24 | 1.0.11 | 4.9.8 | 2.4.260325 |  |  |
