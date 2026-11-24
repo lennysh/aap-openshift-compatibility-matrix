@@ -41,6 +41,12 @@ jobs:
   update-csv:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # Optional: when set, start the component-version fill workflow (another repo) as soon
+      # as this run pushes CSV changes, instead of waiting for its own (often hours-late)
+      # schedule. VERSION_FILL_TOKEN: fine-grained token with Actions read/write on that repo
+      # only. VERSION_FILL_REPO (repository variable): owner/name of that repo.
+      HAS_VERSION_FILL: ${{ secrets.VERSION_FILL_TOKEN != '' && vars.VERSION_FILL_REPO != '' }}
 
     steps:
       - name: Check out repository
@@ -137,6 +143,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
 
           git add data/*.csv AAP_*.md OCP_INDEX_COVERAGE.md README.md
+          git diff --staged --quiet -- data/ || echo "data_changed=true" >> "$GITHUB_OUTPUT"
           if git diff --staged --quiet; then
             echo "No CSV or markdown changes. Nothing to commit."
             echo "pushed=true" >> "$GITHUB_OUTPUT"
@@ -179,3 +186,13 @@ jobs:
         with:
           path: .catalog-processed
           key: ${{ steps.catalog.outputs.key }}
+
+      - name: Start the component-version fill
+        if: >-
+          env.HAS_VERSION_FILL == 'true' && steps.commit.outputs.pushed == 'true'
+          && steps.commit.outputs.data_changed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.VERSION_FILL_TOKEN }}
+          FILL_REPO: ${{ vars.VERSION_FILL_REPO }}
+        run: gh workflow run "AAP Workflow" --repo "$FILL_REPO"
