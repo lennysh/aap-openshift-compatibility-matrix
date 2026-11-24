@@ -169,7 +169,7 @@ def add_new_row_pair(
     rows.append(new_row)
 
 
-def ensure_operator_index_dir(module, ocp_version, cache_dir, registry):
+def ensure_operator_index_dir(module, ocp_version, cache_dir, registry, package_name=None):
     """Return (index_dir, pulled_fresh, status). Caller must not delete cached dirs."""
     cache_sub = None
     if cache_dir:
@@ -180,7 +180,9 @@ def ensure_operator_index_dir(module, ocp_version, cache_dir, registry):
                 if any(f.endswith(".json") for f in files):
                     return cache_sub, False, "cached"
 
-    tmp_dir, status = extract_operator_index(module, ocp_version, registry=registry)
+    tmp_dir, status = extract_operator_index(
+        module, ocp_version, registry=registry, package_name=package_name
+    )
     if tmp_dir is None:
         return None, True, status
 
