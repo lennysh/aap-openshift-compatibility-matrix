@@ -95,24 +95,6 @@ def find_row_with_version(rows, version, col_index):
     return None
 
 
-def get_existing_ocp_support(rows, openshift_col, cluster_col, namespace_col):
-    for row in rows[1:]:
-        ocp_val = get_column_value(row, openshift_col)
-        cluster_val = get_column_value(row, cluster_col)
-        ns_val = get_column_value(row, namespace_col)
-        if (
-            ocp_val
-            and re.match(r"^\d+\.\d+-\d+\.\d+$", ocp_val)
-            and "aap-operator" not in ocp_val
-            and (
-                cluster_val.startswith("aap-operator")
-                or ns_val.startswith("aap-operator")
-            )
-        ):
-            return ocp_val
-    return ""
-
-
 def template_header(data_dir):
     """Header row of the newest existing AAP_<digits>.csv in data_dir (or None)."""
     best = None
@@ -174,12 +156,14 @@ def add_new_row(
     date_col,
     cluster_col,
     namespace_col,
-    openshift_col,
     scope,
     version,
     row_date,
-    existing_ocp,
 ):
+    """New row for a build that has no partner in the other scope (yet).
+
+    OpenShift Support is left blank; aap_openshift_support fills it from index coverage.
+    """
     new_row = [""] * total_cols
     for i in range(1, total_cols + 1):
         if i == date_col:
@@ -188,8 +172,6 @@ def add_new_row(
             new_row[i - 1] = version
         elif i == namespace_col and scope == "namespace":
             new_row[i - 1] = version
-        elif i == openshift_col and existing_ocp:
-            new_row[i - 1] = existing_ocp
     insert_row_in_order(module, rows, new_row, version, cluster_col, namespace_col)
 
 
@@ -200,12 +182,11 @@ def add_new_row_pair(
     date_col,
     cluster_col,
     namespace_col,
-    openshift_col,
     namespace_version,
     cluster_version,
     row_date,
-    existing_ocp,
 ):
+    """New row for a namespace/cluster pair. OpenShift Support is left blank (see add_new_row)."""
     new_row = [""] * total_cols
     for i in range(1, total_cols + 1):
         if i == date_col:
@@ -214,8 +195,6 @@ def add_new_row_pair(
             new_row[i - 1] = cluster_version
         elif i == namespace_col:
             new_row[i - 1] = namespace_version
-        elif i == openshift_col and existing_ocp:
-            new_row[i - 1] = existing_ocp
     insert_row_in_order(module, rows, new_row, namespace_version, cluster_col, namespace_col)
 
 
@@ -267,7 +246,6 @@ def update_csv_for_aap(
     cluster_col = int(columns.get("cluster_scoped", 2))
     namespace_col = int(columns.get("namespace_scoped", 3))
     date_col = int(columns.get("release_date", 1))
-    openshift_col = int(columns.get("openshift_support", 4))
 
     aap_file_version = aap_version.replace(".", "")
     csv_path = os.path.join(data_dir, "AAP_%s.csv" % aap_file_version)
@@ -327,9 +305,6 @@ def update_csv_for_aap(
     total_cols = len(rows[0])
     existing_ns = get_existing_versions(rows, namespace_col)
     existing_cl = get_existing_versions(rows, cluster_col)
-    existing_ocp = get_existing_ocp_support(
-        rows, openshift_col, cluster_col, namespace_col
-    )
 
     paired_cluster = set()
     changed = False
@@ -358,11 +333,9 @@ def update_csv_for_aap(
                     date_col,
                     cluster_col,
                     namespace_col,
-                    openshift_col,
                     ns_version,
                     matching_cl,
                     release_date([ns_version, matching_cl], release_dates),
-                    existing_ocp,
                 )
                 paired_cluster.add(matching_cl)
                 changed = True
@@ -375,11 +348,9 @@ def update_csv_for_aap(
                 date_col,
                 cluster_col,
                 namespace_col,
-                openshift_col,
                 "namespace",
                 ns_version,
                 release_date([ns_version], release_dates),
-                existing_ocp,
             )
             changed = True
             rows_added += 1
@@ -411,11 +382,9 @@ def update_csv_for_aap(
                 date_col,
                 cluster_col,
                 namespace_col,
-                openshift_col,
                 "cluster",
                 cl_version,
                 release_date([cl_version], release_dates),
-                existing_ocp,
             )
             changed = True
             rows_added += 1

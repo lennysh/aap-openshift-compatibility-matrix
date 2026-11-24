@@ -31,7 +31,7 @@ The operator index images remain the source of truth for the data; the catalog o
 
 OpenShift Support merge rules:
 
-- **Blank cell** — filled from min/max OCP index tags where the bundle appears.
+- **Blank cell** — filled from min/max OCP index tags where the bundle appears. New rows always start blank (they used to copy the CSV's first row, whose floor then stuck).
 - **Existing range** — lowest OCP is preserved (EOL floor); highest OCP is extended when a newer index tag lists the bundle.
 
 ## Setup
