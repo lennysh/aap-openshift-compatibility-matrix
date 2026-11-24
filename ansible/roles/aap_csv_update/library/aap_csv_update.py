@@ -137,45 +137,66 @@ def run(module):
     if not namespace_channel:
         module.fail_json(msg="namespace_channel is required for AAP %s" % aap_version)
 
-    index_dir = None
+    # Read EVERY candidate tag and merge, rather than stopping at the first one that
+    # pulls. Discovery lists a tag if any bundle of the stream ever shipped there, so
+    # the newest tag can hold a single stale bundle (e.g. AAP 2.6 on 4.23 has only a
+    # Sept build) while new releases land only on older tags. update_csv_for_aap skips
+    # versions already in the CSV, so applying it once per tag is idempotent.
     not_published = []
-    for ocp_version in ocp_versions:
+    used = []
+    cache_hit = True
+    pulled_any = False
+    result = None
+    totals = {"changed": False, "rows_added": 0, "rows_updated": 0, "csv_created": False}
+    for tag in ocp_versions:
         index_dir, pulled, index_status = ensure_operator_index_dir(
-            module, ocp_version, cache_dir, registry
+            module, tag, cache_dir, registry
         )
-        if index_dir is not None:
-            break
-        if index_status == "tag_not_found":
-            not_published.append(ocp_version)
-            continue
-        module.fail_json(
-            msg="Failed to extract operator index for OCP %s (status=%s)"
-            % (ocp_version, index_status)
-        )
-    if index_dir is None:
+        if index_dir is None:
+            if index_status == "tag_not_found":
+                not_published.append(tag)
+                continue
+            module.fail_json(
+                msg="Failed to extract operator index for OCP %s (status=%s)"
+                % (tag, index_status)
+            )
+        try:
+            r = update_csv_for_aap(
+                module,
+                index_dir,
+                data_dir,
+                columns,
+                aap_version,
+                namespace_channel,
+                cluster_channel,
+                package_name,
+                create_missing_csv=create_missing_csv,
+            )
+        finally:
+            if not cache_dir:
+                shutil.rmtree(index_dir, ignore_errors=True)
+        used.append(tag)
+        cache_hit = cache_hit and index_status == "cached"
+        pulled_any = pulled_any or pulled
+        if r.get("skip_reason") == "csv_not_found":
+            result = r
+            break  # same answer for every tag
+        if r.get("skip_reason") is None:
+            for k in ("changed", "csv_created"):
+                totals[k] = totals[k] or bool(r.get(k))
+            for k in ("rows_added", "rows_updated"):
+                totals[k] += r[k]
+            result = dict(r, **totals)
+        elif result is None or result.get("skip_reason"):
+            result = r  # keep a skip reason only if no tag produced a real update
+
+    if not used:
         module.fail_json(
             msg="None of the operator index tags for AAP %s are published: %s"
             % (aap_version, ", ".join(not_published))
         )
-
-    cache_hit = index_status == "cached"
-    cleanup_index = not cache_dir
-
-    try:
-        result = update_csv_for_aap(
-            module,
-            index_dir,
-            data_dir,
-            columns,
-            aap_version,
-            namespace_channel,
-            cluster_channel,
-            package_name,
-            create_missing_csv=create_missing_csv,
-        )
-    finally:
-        if cleanup_index:
-            shutil.rmtree(index_dir, ignore_errors=True)
+    ocp_version = "+".join(used)
+    pulled = pulled_any
 
     csv_name = "AAP_%s.csv" % aap_version.replace(".", "")
     skip = result.get("skip_reason")
